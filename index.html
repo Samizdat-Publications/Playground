@@ -1,0 +1,1029 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Emergence — Complexity from Simplicity</title>
+<style>
+  *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+  :root{
+    --bg:#0a0a12;--surface:#12121f;--surface2:#1a1a2e;--border:#2a2a44;
+    --text:#e0e0f0;--text2:#8888aa;--accent:#6c63ff;--accent2:#ff6584;
+    --accent3:#43e97b;--accent4:#38f9d7;--glow:rgba(108,99,255,.3);
+  }
+  @font-face{font-family:sys;src:local('SF Pro Display'),local('Segoe UI'),local('Ubuntu'),local(sans-serif)}
+  html,body{height:100%;overflow:hidden;font-family:'SF Pro Display','Segoe UI','Ubuntu',sans-serif;background:var(--bg);color:var(--text)}
+
+  /* --- Layout --- */
+  #app{display:flex;height:100vh;width:100vw}
+
+  /* --- Sidebar --- */
+  #sidebar{
+    width:280px;min-width:280px;background:var(--surface);border-right:1px solid var(--border);
+    display:flex;flex-direction:column;z-index:10;transition:transform .3s ease;
+  }
+  #sidebar.collapsed{transform:translateX(-280px);min-width:0;width:0;overflow:hidden}
+  #sidebar-header{padding:24px 20px 16px;border-bottom:1px solid var(--border)}
+  #sidebar-header h1{font-size:18px;font-weight:700;letter-spacing:-.5px;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+  #sidebar-header p{font-size:11px;color:var(--text2);margin-top:4px;line-height:1.4}
+
+  .nav-section{padding:12px 12px 0;flex:1;overflow-y:auto}
+  .nav-section h2{font-size:10px;text-transform:uppercase;letter-spacing:1.5px;color:var(--text2);padding:0 8px 8px;font-weight:600}
+  .nav-btn{
+    display:flex;align-items:center;gap:12px;width:100%;padding:10px 12px;border:none;
+    background:transparent;color:var(--text);border-radius:8px;cursor:pointer;
+    font-size:13px;font-weight:500;transition:all .15s ease;text-align:left;font-family:inherit;
+  }
+  .nav-btn:hover{background:var(--surface2)}
+  .nav-btn.active{background:linear-gradient(135deg,rgba(108,99,255,.15),rgba(255,101,132,.1));
+    color:#fff;box-shadow:inset 0 0 0 1px rgba(108,99,255,.3)}
+  .nav-btn .icon{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;
+    font-size:16px;flex-shrink:0}
+  .nav-btn .label{display:flex;flex-direction:column}
+  .nav-btn .label small{font-size:10px;color:var(--text2);font-weight:400;margin-top:1px}
+
+  /* --- Main area --- */
+  #main{flex:1;display:flex;flex-direction:column;position:relative;overflow:hidden}
+
+  /* --- Top bar --- */
+  #topbar{
+    height:48px;background:var(--surface);border-bottom:1px solid var(--border);
+    display:flex;align-items:center;padding:0 16px;gap:12px;z-index:5;flex-shrink:0;
+  }
+  #toggle-sidebar{background:none;border:none;color:var(--text2);cursor:pointer;font-size:18px;padding:4px}
+  #sim-title{font-size:14px;font-weight:600;flex:1}
+  #fps-counter{font-size:11px;color:var(--text2);font-variant-numeric:tabular-nums}
+
+  /* --- Canvas area --- */
+  #canvas-wrap{flex:1;position:relative;overflow:hidden;background:var(--bg)}
+  canvas{display:block;width:100%;height:100%}
+
+  /* --- Controls panel --- */
+  #controls{
+    position:absolute;top:12px;right:12px;width:260px;background:rgba(18,18,31,.92);
+    border:1px solid var(--border);border-radius:12px;padding:16px;backdrop-filter:blur(12px);
+    z-index:5;max-height:calc(100vh - 100px);overflow-y:auto;
+    box-shadow:0 8px 32px rgba(0,0,0,.4);
+  }
+  #controls h3{font-size:12px;font-weight:600;margin-bottom:12px;color:var(--accent);text-transform:uppercase;letter-spacing:1px}
+  .ctrl-group{margin-bottom:14px}
+  .ctrl-group label{display:flex;justify-content:space-between;font-size:11px;color:var(--text2);margin-bottom:4px}
+  .ctrl-group label span{color:var(--accent4);font-variant-numeric:tabular-nums}
+  input[type=range]{
+    -webkit-appearance:none;width:100%;height:6px;border-radius:3px;outline:none;
+    background:var(--surface2);
+  }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none;width:14px;height:14px;border-radius:50%;
+    background:var(--accent);cursor:pointer;box-shadow:0 0 8px var(--glow);
+  }
+  select,button.ctrl-btn{
+    width:100%;padding:8px 10px;border-radius:6px;border:1px solid var(--border);
+    background:var(--surface2);color:var(--text);font-size:12px;cursor:pointer;font-family:inherit;
+  }
+  select:hover,button.ctrl-btn:hover{border-color:var(--accent)}
+  button.ctrl-btn{
+    background:linear-gradient(135deg,var(--accent),#8b5cf6);border:none;
+    font-weight:600;margin-top:4px;transition:opacity .15s;
+  }
+  button.ctrl-btn:hover{opacity:.85}
+  button.ctrl-btn.secondary{background:var(--surface2);border:1px solid var(--border)}
+
+  /* --- Description overlay --- */
+  #description{
+    position:absolute;bottom:16px;left:16px;right:16px;
+    background:rgba(18,18,31,.88);border:1px solid var(--border);border-radius:12px;
+    padding:14px 18px;backdrop-filter:blur(12px);z-index:4;
+    font-size:12px;line-height:1.5;color:var(--text2);
+    box-shadow:0 4px 24px rgba(0,0,0,.3);transition:opacity .3s,transform .3s;
+  }
+  #description strong{color:var(--text);font-weight:600}
+  #description .rule{color:var(--accent3);font-family:'SF Mono','Fira Code',monospace;font-size:11px}
+  #desc-close{position:absolute;top:8px;right:12px;background:none;border:none;color:var(--text2);cursor:pointer;font-size:14px}
+  #description.hidden{opacity:0;transform:translateY(10px);pointer-events:none}
+
+  /* --- Loading shimmer --- */
+  .shimmer{
+    position:absolute;inset:0;z-index:20;background:var(--bg);
+    display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;
+    transition:opacity .5s ease;
+  }
+  .shimmer.hide{opacity:0;pointer-events:none}
+  .shimmer-ring{
+    width:48px;height:48px;border:3px solid var(--border);border-top-color:var(--accent);
+    border-radius:50%;animation:spin .8s linear infinite;
+  }
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .shimmer p{font-size:12px;color:var(--text2)}
+
+  /* scrollbar */
+  ::-webkit-scrollbar{width:5px}
+  ::-webkit-scrollbar-track{background:transparent}
+  ::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}
+</style>
+</head>
+<body>
+<div id="app">
+  <!-- Sidebar -->
+  <nav id="sidebar">
+    <div id="sidebar-header">
+      <h1>Emergence</h1>
+      <p>Complexity arising from simple rules. Explore six interactive simulations.</p>
+    </div>
+    <div class="nav-section">
+      <h2>Simulations</h2>
+      <button class="nav-btn active" data-sim="automata" onclick="switchSim('automata')">
+        <div class="icon" style="background:linear-gradient(135deg,#6c63ff22,#6c63ff44)">&#9638;</div>
+        <div class="label">Elementary Automata<small>Wolfram's 1D rules</small></div>
+      </button>
+      <button class="nav-btn" data-sim="life" onclick="switchSim('life')">
+        <div class="icon" style="background:linear-gradient(135deg,#43e97b22,#43e97b44)">&#9724;</div>
+        <div class="label">Game of Life<small>Conway's 2D cellular automaton</small></div>
+      </button>
+      <button class="nav-btn" data-sim="lsystem" onclick="switchSim('lsystem')">
+        <div class="icon" style="background:linear-gradient(135deg,#38f9d722,#38f9d744)">&#9752;</div>
+        <div class="label">L-System Fractals<small>Recursive botanical growth</small></div>
+      </button>
+      <button class="nav-btn" data-sim="reaction" onclick="switchSim('reaction')">
+        <div class="icon" style="background:linear-gradient(135deg,#ff658422,#ff658444)">&#9775;</div>
+        <div class="label">Reaction-Diffusion<small>Gray-Scott Turing patterns</small></div>
+      </button>
+      <button class="nav-btn" data-sim="boids" onclick="switchSim('boids')">
+        <div class="icon" style="background:linear-gradient(135deg,#f6d36522,#f6d36544)">&#9656;</div>
+        <div class="label">Boids Flocking<small>Emergent swarm behavior</small></div>
+      </button>
+      <button class="nav-btn" data-sim="fractal" onclick="switchSim('fractal')">
+        <div class="icon" style="background:linear-gradient(135deg,#a855f722,#a855f744)">&#8734;</div>
+        <div class="label">Mandelbrot Explorer<small>Infinite fractal zoom</small></div>
+      </button>
+    </div>
+  </nav>
+
+  <!-- Main -->
+  <div id="main">
+    <div id="topbar">
+      <button id="toggle-sidebar" onclick="toggleSidebar()">&#9776;</button>
+      <span id="sim-title">Elementary Cellular Automata</span>
+      <span id="fps-counter">-- fps</span>
+    </div>
+    <div id="canvas-wrap">
+      <canvas id="canvas"></canvas>
+      <div id="controls"></div>
+      <div id="description"></div>
+      <div class="shimmer" id="shimmer"><div class="shimmer-ring"></div><p>Initializing...</p></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+//  CORE ENGINE
+// ============================================================
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const controlsEl = document.getElementById('controls');
+const descEl = document.getElementById('description');
+const titleEl = document.getElementById('sim-title');
+const fpsEl = document.getElementById('fps-counter');
+const shimmer = document.getElementById('shimmer');
+
+let W, H, dpr;
+let activeSim = null;
+let animId = null;
+let lastTime = 0, frameCount = 0, fpsTime = 0;
+
+function resize() {
+  dpr = window.devicePixelRatio || 1;
+  const rect = canvas.parentElement.getBoundingClientRect();
+  W = rect.width; H = rect.height;
+  canvas.width = W * dpr; canvas.height = H * dpr;
+  canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  if (activeSim && activeSim.resize) activeSim.resize(W, H);
+}
+window.addEventListener('resize', resize);
+
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('collapsed');
+  setTimeout(resize, 350);
+}
+
+function switchSim(name) {
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.sim === name));
+  if (animId) cancelAnimationFrame(animId);
+  if (activeSim && activeSim.destroy) activeSim.destroy();
+  activeSim = null;
+  shimmer.classList.remove('hide');
+
+  setTimeout(() => {
+    resize();
+    activeSim = sims[name]();
+    shimmer.classList.add('hide');
+    lastTime = performance.now(); frameCount = 0; fpsTime = lastTime;
+    loop(lastTime);
+  }, 80);
+}
+
+function loop(t) {
+  animId = requestAnimationFrame(loop);
+  const dt = Math.min(t - lastTime, 50); lastTime = t;
+  frameCount++;
+  if (t - fpsTime > 500) { fpsEl.textContent = Math.round(frameCount / ((t - fpsTime) / 1000)) + ' fps'; frameCount = 0; fpsTime = t; }
+  if (activeSim && activeSim.update) activeSim.update(dt, t);
+  if (activeSim && activeSim.draw) activeSim.draw(ctx, W, H);
+}
+
+function setControls(html) { controlsEl.innerHTML = html; }
+function setDescription(html) { descEl.innerHTML = html + '<button id="desc-close" onclick="this.parentElement.classList.add(\'hidden\')">&#10005;</button>'; descEl.classList.remove('hidden'); }
+function setTitle(t) { titleEl.textContent = t; }
+
+// Helper: color from hsl
+function hsl(h, s, l) { return `hsl(${h},${s}%,${l}%)`; }
+
+// ============================================================
+//  SIMULATIONS
+// ============================================================
+const sims = {};
+
+// ---- 1. Elementary Cellular Automata ----
+sims.automata = function() {
+  setTitle('Elementary Cellular Automata');
+  setDescription('<strong>Wolfram\'s Elementary Automata</strong> — A 1D row of cells evolves using a simple rule that looks at each cell and its two neighbors. Just 3 bits of input, 1 bit of output. Yet some rules (like <span class="rule">Rule 30</span> and <span class="rule">Rule 110</span>) produce chaos and even Turing-complete computation from this trivial starting point.');
+
+  let rule = 30, cellSize = 3, cells, row, generation;
+  const palette = [];
+  for (let i = 0; i < 256; i++) palette.push(hsl(260 + i * 0.4, 70, 10 + i * 0.25));
+
+  function init() {
+    const cols = Math.ceil(W / cellSize);
+    cells = new Uint8Array(cols);
+    cells[Math.floor(cols / 2)] = 1;
+    row = 0; generation = 0;
+    ctx.fillStyle = '#0a0a12'; ctx.fillRect(0, 0, W, H);
+  }
+
+  function applyRule(l, c, r) { return (rule >> ((l << 2) | (c << 1) | r)) & 1; }
+
+  function setRule(r) { rule = r; init(); document.getElementById('rule-val').textContent = r; }
+
+  setControls(`
+    <h3>Controls</h3>
+    <div class="ctrl-group">
+      <label>Rule Number <span id="rule-val">${rule}</span></label>
+      <input type="range" min="0" max="255" value="${rule}" oninput="document.getElementById('rule-val').textContent=this.value" onchange="window._eca_setRule(+this.value)">
+    </div>
+    <div class="ctrl-group">
+      <label>Cell Size <span id="cs-val">${cellSize}</span></label>
+      <input type="range" min="1" max="8" value="${cellSize}" oninput="document.getElementById('cs-val').textContent=this.value" onchange="window._eca_cs=+this.value;window._eca_setRule(${rule})">
+    </div>
+    <div class="ctrl-group">
+      <label>Presets</label>
+      <select onchange="window._eca_setRule(+this.value)">
+        <option value="30">Rule 30 — Chaos</option>
+        <option value="90">Rule 90 — Sierpinski</option>
+        <option value="110">Rule 110 — Turing Complete</option>
+        <option value="184">Rule 184 — Traffic Flow</option>
+        <option value="150">Rule 150 — Fractal</option>
+        <option value="73">Rule 73 — Complex</option>
+      </select>
+    </div>
+    <button class="ctrl-btn" onclick="window._eca_setRule(Math.floor(Math.random()*256))">Random Rule</button>
+    <button class="ctrl-btn secondary" style="margin-top:6px" onclick="window._eca_setRule(window._eca_rule)">Reset</button>
+  `);
+
+  window._eca_setRule = (r) => { rule = r; window._eca_rule = r; cellSize = window._eca_cs || cellSize; init(); };
+  window._eca_cs = cellSize; window._eca_rule = rule;
+
+  init();
+
+  return {
+    update(dt) {
+      const cols = cells.length;
+      const maxRows = Math.ceil(H / cellSize);
+      const steps = Math.max(1, Math.floor(dt / 8));
+
+      for (let s = 0; s < steps && row < maxRows; s++) {
+        // Draw current row
+        for (let x = 0; x < cols; x++) {
+          if (cells[x]) {
+            const age = Math.min(generation, 255);
+            const h = (260 + generation * 0.5 + x * 0.1) % 360;
+            ctx.fillStyle = hsl(h, 80, 55);
+            ctx.fillRect(x * cellSize, row * cellSize, cellSize, cellSize);
+          }
+        }
+        // Compute next generation
+        const next = new Uint8Array(cols);
+        for (let x = 0; x < cols; x++) {
+          const l = cells[(x - 1 + cols) % cols];
+          const c = cells[x];
+          const r = cells[(x + 1) % cols];
+          next[x] = applyRule(l, c, r);
+        }
+        cells = next; row++; generation++;
+      }
+
+      if (row >= maxRows) { init(); } // restart when filled
+    },
+    draw() {},
+    resize() { init(); },
+    destroy() { delete window._eca_setRule; }
+  };
+};
+
+// ---- 2. Conway's Game of Life ----
+sims.life = function() {
+  setTitle("Conway's Game of Life");
+  setDescription("<strong>Conway's Game of Life</strong> — Each cell is alive or dead. A dead cell with exactly 3 live neighbors is born. A live cell with 2-3 neighbors survives; otherwise it dies. These two rules create <span class='rule'>gliders</span>, <span class='rule'>oscillators</span>, <span class='rule'>spaceships</span>, and even universal computers. Click to draw cells.");
+
+  const cs = 4;
+  let cols, rows, grid, gridB, gen = 0;
+  let painting = false, paintVal = 1;
+  let colorMode = 0; // 0=age, 1=heat
+  let ages;
+  let running = true;
+  let speed = 1;
+
+  function init(pattern) {
+    cols = Math.ceil(W / cs); rows = Math.ceil(H / cs);
+    grid = new Uint8Array(cols * rows);
+    gridB = new Uint8Array(cols * rows);
+    ages = new Float32Array(cols * rows);
+    gen = 0;
+    if (pattern === 'random') {
+      for (let i = 0; i < grid.length; i++) grid[i] = Math.random() < 0.3 ? 1 : 0;
+    } else if (pattern === 'acorn') {
+      const cx = Math.floor(cols/2), cy = Math.floor(rows/2);
+      [[0,0],[1,0],[4,0],[5,0],[6,0],[3,1],[1,2]].forEach(([dx,dy]) => {
+        grid[(cy+dy)*cols+(cx+dx)] = 1;
+      });
+    } else {
+      // R-pentomino
+      const cx = Math.floor(cols/2), cy = Math.floor(rows/2);
+      [[1,0],[2,0],[0,1],[1,1],[1,2]].forEach(([dx,dy]) => {
+        grid[(cy+dy)*cols+(cx+dx)] = 1;
+      });
+    }
+  }
+
+  function step() {
+    gridB.fill(0);
+    for (let y = 1; y < rows-1; y++) {
+      for (let x = 1; x < cols-1; x++) {
+        const i = y*cols+x;
+        const n = grid[i-cols-1]+grid[i-cols]+grid[i-cols+1]+grid[i-1]+grid[i+1]+grid[i+cols-1]+grid[i+cols]+grid[i+cols+1];
+        if (grid[i]) { gridB[i] = (n===2||n===3)?1:0; }
+        else { gridB[i] = n===3?1:0; }
+        if (gridB[i]) ages[i] = grid[i] ? ages[i]+1 : 1; else ages[i] = 0;
+      }
+    }
+    [grid, gridB] = [gridB, grid];
+    gen++;
+  }
+
+  // Mouse interaction
+  function getCell(e) {
+    const rect = canvas.getBoundingClientRect();
+    const x = Math.floor((e.clientX - rect.left) / cs);
+    const y = Math.floor((e.clientY - rect.top) / cs);
+    return {x, y};
+  }
+
+  const onDown = (e) => { painting=true; const {x,y}=getCell(e); if(x>=0&&x<cols&&y>=0&&y<rows){paintVal=grid[y*cols+x]?0:1;grid[y*cols+x]=paintVal;ages[y*cols+x]=paintVal?1:0;} };
+  const onMove = (e) => { if(!painting)return; const{x,y}=getCell(e); if(x>=0&&x<cols&&y>=0&&y<rows){grid[y*cols+x]=paintVal;ages[y*cols+x]=paintVal?1:0;} };
+  const onUp = () => { painting=false; };
+  canvas.addEventListener('mousedown', onDown);
+  canvas.addEventListener('mousemove', onMove);
+  canvas.addEventListener('mouseup', onUp);
+
+  setControls(`
+    <h3>Controls</h3>
+    <div class="ctrl-group">
+      <label>Speed <span id="life-speed">1</span>x</label>
+      <input type="range" min="1" max="20" value="1" oninput="document.getElementById('life-speed').textContent=this.value;window._life_speed=+this.value">
+    </div>
+    <div class="ctrl-group">
+      <label>Pattern</label>
+      <select onchange="window._life_init(this.value)">
+        <option value="rpent">R-Pentomino</option>
+        <option value="acorn">Acorn</option>
+        <option value="random">Random Soup</option>
+      </select>
+    </div>
+    <button class="ctrl-btn" onclick="window._life_running=!window._life_running;this.textContent=window._life_running?'Pause':'Play'">Pause</button>
+    <button class="ctrl-btn secondary" style="margin-top:6px" onclick="window._life_init('rpent')">Reset</button>
+    <div style="margin-top:10px;font-size:11px;color:var(--text2)">Generation: <span id="life-gen">0</span></div>
+  `);
+
+  window._life_speed = 1;
+  window._life_running = true;
+  window._life_init = (p) => { init(p); };
+
+  init('rpent');
+
+  return {
+    update(dt) {
+      if (!window._life_running) return;
+      const steps = window._life_speed || 1;
+      for (let i = 0; i < steps; i++) step();
+      document.getElementById('life-gen').textContent = gen;
+    },
+    draw(ctx) {
+      ctx.fillStyle = '#0a0a12';
+      ctx.fillRect(0, 0, W, H);
+      for (let y = 0; y < rows; y++) {
+        for (let x = 0; x < cols; x++) {
+          if (grid[y*cols+x]) {
+            const age = Math.min(ages[y*cols+x], 200);
+            const h = (140 + age * 1.2) % 360;
+            const l = 40 + Math.min(age, 60) * 0.3;
+            ctx.fillStyle = hsl(h, 75, l);
+            ctx.fillRect(x*cs, y*cs, cs-0.5, cs-0.5);
+          }
+        }
+      }
+    },
+    resize() { init('rpent'); },
+    destroy() {
+      canvas.removeEventListener('mousedown', onDown);
+      canvas.removeEventListener('mousemove', onMove);
+      canvas.removeEventListener('mouseup', onUp);
+      delete window._life_init;
+    }
+  };
+};
+
+// ---- 3. L-System Fractals ----
+sims.lsystem = function() {
+  setTitle('L-System Fractals');
+  setDescription("<strong>Lindenmayer Systems</strong> — A string is rewritten by simple substitution rules, then interpreted as drawing commands. <span class='rule'>F=draw forward, +=turn right, -=turn left, [=save, ]=restore</span>. A handful of characters produces intricate botanical forms, snowflakes, and space-filling curves.");
+
+  const presets = {
+    'tree': { axiom:'X', rules:{X:'F+[[X]-X]-F[-FX]+X', F:'FF'}, angle:25, iter:6, name:'Fractal Tree' },
+    'koch': { axiom:'F', rules:{F:'F+F-F-F+F'}, angle:90, iter:5, name:'Koch Curve' },
+    'sierpinski': { axiom:'F-G-G', rules:{F:'F-G+F+G-F', G:'GG'}, angle:120, iter:7, name:'Sierpinski Triangle' },
+    'dragon': { axiom:'FX', rules:{X:'X+YF+', Y:'-FX-Y'}, angle:90, iter:13, name:'Dragon Curve' },
+    'plant': { axiom:'X', rules:{X:'F[-X][X]F[-X]+FX', F:'FF'}, angle:20, iter:6, name:'Bush' },
+    'hilbert': { axiom:'A', rules:{A:'-BF+AFA+FB-', B:'+AF-BFB-FA+'}, angle:90, iter:6, name:'Hilbert Curve' },
+  };
+
+  let current = 'tree', drawData = null, animProgress = 0, animating = true;
+
+  function generate(preset) {
+    let str = preset.axiom;
+    for (let i = 0; i < preset.iter; i++) {
+      let next = '';
+      for (const ch of str) next += preset.rules[ch] || ch;
+      str = next;
+    }
+    // Interpret to get points
+    const segments = [];
+    let x=0, y=0, a=-90, stack=[];
+    const rad = Math.PI/180;
+    const len = preset.iter > 10 ? 2 : preset.iter > 7 ? 3 : preset.iter > 5 ? 4 : 6;
+
+    for (const ch of str) {
+      if (ch==='F'||ch==='G') {
+        const nx = x+Math.cos(a*rad)*len, ny = y+Math.sin(a*rad)*len;
+        segments.push({x1:x,y1:y,x2:nx,y2:ny,depth:stack.length});
+        x=nx; y=ny;
+      } else if (ch==='+') a+=preset.angle;
+      else if (ch==='-') a-=preset.angle;
+      else if (ch==='[') stack.push({x,y,a});
+      else if (ch===']') { const s=stack.pop(); x=s.x; y=s.y; a=s.a; }
+    }
+    return segments;
+  }
+
+  function build(name) {
+    current = name;
+    const preset = presets[name];
+    const segs = generate(preset);
+    // Compute bounds
+    let minX=Inf,minY=Inf,maxX=-Inf,maxY=-Inf;
+    const Inf = 1e9;
+    minX=1e9;minY=1e9;maxX=-1e9;maxY=-1e9;
+    for (const s of segs) {
+      minX=Math.min(minX,s.x1,s.x2); minY=Math.min(minY,s.y1,s.y2);
+      maxX=Math.max(maxX,s.x1,s.x2); maxY=Math.max(maxY,s.y1,s.y2);
+    }
+    drawData = { segs, minX, minY, maxX, maxY, total: segs.length };
+    animProgress = 0;
+  }
+
+  setControls(`
+    <h3>Controls</h3>
+    <div class="ctrl-group">
+      <label>L-System</label>
+      <select id="lsys-select" onchange="window._lsys_build(this.value)">
+        ${Object.entries(presets).map(([k,v]) => `<option value="${k}"${k===current?' selected':''}>${v.name}</option>`).join('')}
+      </select>
+    </div>
+    <div class="ctrl-group">
+      <label>Draw Speed <span id="lsys-speed-val">100</span>%</label>
+      <input type="range" min="1" max="100" value="100" oninput="document.getElementById('lsys-speed-val').textContent=this.value;window._lsys_aspeed=+this.value">
+    </div>
+    <button class="ctrl-btn" onclick="window._lsys_build(window._lsys_current)">Redraw</button>
+  `);
+
+  window._lsys_build = (n) => { window._lsys_current = n; build(n); };
+  window._lsys_current = current;
+  window._lsys_aspeed = 100;
+  build(current);
+
+  return {
+    update(dt) {
+      if (!drawData) return;
+      const speed = (window._lsys_aspeed || 100) / 100;
+      animProgress = Math.min(animProgress + drawData.total * speed * dt * 0.002, drawData.total);
+    },
+    draw(ctx) {
+      if (!drawData) return;
+      ctx.fillStyle = '#0a0a12'; ctx.fillRect(0,0,W,H);
+      const {segs, minX, minY, maxX, maxY, total} = drawData;
+      const pw = maxX-minX||1, ph = maxY-minY||1;
+      const scale = Math.min(W*0.85/pw, H*0.85/ph);
+      const ox = (W - pw*scale)/2 - minX*scale;
+      const oy = (H - ph*scale)/2 - minY*scale;
+
+      const count = Math.floor(animProgress);
+      ctx.lineWidth = 1.2;
+      ctx.lineCap = 'round';
+
+      for (let i = 0; i < count; i++) {
+        const s = segs[i];
+        const t = i / total;
+        const h = (t * 300 + 160) % 360;
+        const depth = Math.min(s.depth, 8);
+        ctx.strokeStyle = hsl(h, 70 + depth*3, 45 + depth*4);
+        ctx.globalAlpha = 0.7 + 0.3 * (1 - t);
+        ctx.beginPath();
+        ctx.moveTo(s.x1*scale+ox, s.y1*scale+oy);
+        ctx.lineTo(s.x2*scale+ox, s.y2*scale+oy);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+    },
+    resize() { build(current); },
+    destroy() { delete window._lsys_build; }
+  };
+};
+
+// ---- 4. Reaction-Diffusion (Gray-Scott) ----
+sims.reaction = function() {
+  setTitle('Reaction-Diffusion');
+  setDescription("<strong>Gray-Scott Model</strong> — Two virtual chemicals diffuse across a grid and react: <span class='rule'>U + 2V → 3V</span>. By varying feed and kill rates, the system produces spots, stripes, spirals, and maze-like Turing patterns — all from simple local chemistry. Click to seed new chemical drops.");
+
+  const scale = 2;
+  let gw, gh, u, v, uN, vN;
+  let feed = 0.037, kill = 0.06;
+
+  const presetParams = {
+    'mitosis': {f:0.0367, k:0.0649},
+    'coral': {f:0.0545, k:0.062},
+    'maze': {f:0.029, k:0.057},
+    'spots': {f:0.035, k:0.065},
+    'worms': {f:0.078, k:0.061},
+    'waves': {f:0.014, k:0.045},
+  };
+
+  function init() {
+    gw = Math.ceil(W / scale); gh = Math.ceil(H / scale);
+    const sz = gw * gh;
+    u = new Float32Array(sz).fill(1);
+    v = new Float32Array(sz).fill(0);
+    uN = new Float32Array(sz);
+    vN = new Float32Array(sz);
+    // Seed center
+    seed(gw/2, gh/2, 20);
+  }
+
+  function seed(cx, cy, r) {
+    for (let y = -r; y <= r; y++) {
+      for (let x = -r; x <= r; x++) {
+        if (x*x+y*y > r*r) continue;
+        const px = Math.floor(cx+x), py = Math.floor(cy+y);
+        if (px>=0&&px<gw&&py>=0&&py<gh) {
+          const i = py*gw+px;
+          v[i] = 0.5 + Math.random()*0.5;
+          u[i] = 0.25 + Math.random()*0.25;
+        }
+      }
+    }
+  }
+
+  function step() {
+    const dU = 0.21, dV = 0.105;
+    for (let y = 1; y < gh-1; y++) {
+      for (let x = 1; x < gw-1; x++) {
+        const i = y*gw+x;
+        const lapU = u[i-1]+u[i+1]+u[i-gw]+u[i+gw]-4*u[i];
+        const lapV = v[i-1]+v[i+1]+v[i-gw]+v[i+gw]-4*v[i];
+        const uvv = u[i]*v[i]*v[i];
+        uN[i] = u[i] + dU*lapU - uvv + feed*(1-u[i]);
+        vN[i] = v[i] + dV*lapV + uvv - (feed+kill)*v[i];
+      }
+    }
+    [u, uN] = [uN, u];
+    [v, vN] = [vN, v];
+  }
+
+  const onClick = (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / scale;
+    const y = (e.clientY - rect.top) / scale;
+    seed(x, y, 15);
+  };
+  canvas.addEventListener('click', onClick);
+
+  let imgData = null;
+  const offCanvas = document.createElement('canvas');
+  const offCtx = offCanvas.getContext('2d');
+
+  setControls(`
+    <h3>Controls</h3>
+    <div class="ctrl-group">
+      <label>Feed Rate <span id="rd-f">${feed}</span></label>
+      <input type="range" min="0.01" max="0.08" step="0.001" value="${feed}" oninput="window._rd_f=+this.value;document.getElementById('rd-f').textContent=(+this.value).toFixed(3)">
+    </div>
+    <div class="ctrl-group">
+      <label>Kill Rate <span id="rd-k">${kill}</span></label>
+      <input type="range" min="0.03" max="0.07" step="0.001" value="${kill}" oninput="window._rd_k=+this.value;document.getElementById('rd-k').textContent=(+this.value).toFixed(3)">
+    </div>
+    <div class="ctrl-group">
+      <label>Presets</label>
+      <select onchange="const p=window._rd_presets[this.value];window._rd_f=p.f;window._rd_k=p.k;document.getElementById('rd-f').textContent=p.f;document.getElementById('rd-k').textContent=p.k;window._rd_init()">
+        ${Object.keys(presetParams).map(k => `<option value="${k}">${k.charAt(0).toUpperCase()+k.slice(1)}</option>`).join('')}
+      </select>
+    </div>
+    <button class="ctrl-btn" onclick="window._rd_init()">Reset</button>
+  `);
+
+  window._rd_f = feed; window._rd_k = kill;
+  window._rd_presets = presetParams;
+  window._rd_init = () => { feed = window._rd_f; kill = window._rd_k; init(); imgData = null; };
+
+  init();
+
+  return {
+    update() {
+      feed = window._rd_f; kill = window._rd_k;
+      for (let i = 0; i < 8; i++) step();
+    },
+    draw(ctx) {
+      if (!imgData || imgData.width !== gw || imgData.height !== gh) {
+        offCanvas.width = gw; offCanvas.height = gh;
+        imgData = offCtx.createImageData(gw, gh);
+      }
+      const d = imgData.data;
+      for (let i = 0; i < gw*gh; i++) {
+        const val = v[i];
+        const t = Math.min(val * 3, 1);
+        let r, g, b;
+        if (t < 0.33) { const s=t/0.33; r=10+s*60; g=10+s*20; b=40+s*120; }
+        else if (t < 0.66) { const s=(t-0.33)/0.33; r=70+s*140; g=30+s*30; b=160-s*30; }
+        else { const s=(t-0.66)/0.34; r=210+s*45; g=60+s*195; b=130+s*125; }
+        const idx = i*4;
+        d[idx]=r; d[idx+1]=g; d[idx+2]=b; d[idx+3]=255;
+      }
+      offCtx.putImageData(imgData, 0, 0);
+      ctx.save();
+      ctx.imageSmoothingEnabled = true;
+      ctx.drawImage(offCanvas, 0, 0, gw, gh, 0, 0, W, H);
+      ctx.restore();
+    },
+    resize() { init(); imgData = null; },
+    destroy() { canvas.removeEventListener('click', onClick); delete window._rd_init; }
+  };
+};
+
+// ---- 5. Boids Flocking ----
+sims.boids = function() {
+  setTitle('Boids Flocking');
+  setDescription("<strong>Boids</strong> — Each agent follows just 3 rules: <span class='rule'>Separation</span> (avoid crowding), <span class='rule'>Alignment</span> (steer toward average heading), and <span class='rule'>Cohesion</span> (steer toward average position). These trivial local rules produce mesmerizing emergent flocking. Move your mouse to attract them.");
+
+  const N = 300;
+  let boids = [], mouseX = W/2, mouseY = H/2, mouseActive = false;
+  let sep = 25, ali = 50, coh = 50, maxSpeed = 3.5, sepW = 1.5, aliW = 1, cohW = 1;
+  let trails = true;
+
+  function createBoid() {
+    return {
+      x: Math.random()*W, y: Math.random()*H,
+      vx: (Math.random()-0.5)*4, vy: (Math.random()-0.5)*4,
+      trail: [],
+    };
+  }
+
+  function init() {
+    boids = [];
+    for (let i = 0; i < N; i++) boids.push(createBoid());
+  }
+
+  const onMM = (e) => { const r=canvas.getBoundingClientRect(); mouseX=e.clientX-r.left; mouseY=e.clientY-r.top; mouseActive=true; };
+  const onML = () => { mouseActive=false; };
+  canvas.addEventListener('mousemove', onMM);
+  canvas.addEventListener('mouseleave', onML);
+
+  setControls(`
+    <h3>Controls</h3>
+    <div class="ctrl-group">
+      <label>Separation <span id="b-sep">${sepW}</span></label>
+      <input type="range" min="0" max="3" step="0.1" value="${sepW}" oninput="window._boids_sepW=+this.value;document.getElementById('b-sep').textContent=this.value">
+    </div>
+    <div class="ctrl-group">
+      <label>Alignment <span id="b-ali">${aliW}</span></label>
+      <input type="range" min="0" max="3" step="0.1" value="${aliW}" oninput="window._boids_aliW=+this.value;document.getElementById('b-ali').textContent=this.value">
+    </div>
+    <div class="ctrl-group">
+      <label>Cohesion <span id="b-coh">${cohW}</span></label>
+      <input type="range" min="0" max="3" step="0.1" value="${cohW}" oninput="window._boids_cohW=+this.value;document.getElementById('b-coh').textContent=this.value">
+    </div>
+    <div class="ctrl-group">
+      <label>Max Speed <span id="b-spd">${maxSpeed}</span></label>
+      <input type="range" min="1" max="8" step="0.5" value="${maxSpeed}" oninput="window._boids_spd=+this.value;document.getElementById('b-spd').textContent=this.value">
+    </div>
+    <button class="ctrl-btn" onclick="window._boids_init()">Reset</button>
+  `);
+
+  window._boids_sepW = sepW; window._boids_aliW = aliW; window._boids_cohW = cohW; window._boids_spd = maxSpeed;
+  window._boids_init = init;
+
+  init();
+
+  return {
+    update(dt) {
+      const sw = window._boids_sepW, aw = window._boids_aliW, cw = window._boids_cohW;
+      const ms = window._boids_spd;
+
+      for (const b of boids) {
+        let sx=0,sy=0,sc=0, ax=0,ay=0,ac=0, cx=0,cy=0,cc=0;
+
+        for (const o of boids) {
+          if (o === b) continue;
+          const dx = o.x-b.x, dy = o.y-b.y;
+          const d2 = dx*dx+dy*dy;
+          if (d2 < sep*sep && d2 > 0) { const d=Math.sqrt(d2); sx-=dx/d; sy-=dy/d; sc++; }
+          if (d2 < ali*ali) { ax+=o.vx; ay+=o.vy; ac++; }
+          if (d2 < coh*coh) { cx+=o.x; cy+=o.y; cc++; }
+        }
+
+        if (sc>0) { b.vx+=sx/sc*sw*0.5; b.vy+=sy/sc*sw*0.5; }
+        if (ac>0) { b.vx+=(ax/ac-b.vx)*aw*0.05; b.vy+=(ay/ac-b.vy)*aw*0.05; }
+        if (cc>0) { b.vx+=(cx/cc-b.x)*cw*0.003; b.vy+=(cy/cc-b.y)*cw*0.003; }
+
+        // Mouse attraction
+        if (mouseActive) {
+          const dx=mouseX-b.x, dy=mouseY-b.y;
+          const d=Math.sqrt(dx*dx+dy*dy);
+          if (d < 200 && d > 0) { b.vx+=dx/d*0.3; b.vy+=dy/d*0.3; }
+        }
+
+        // Clamp speed
+        const spd = Math.sqrt(b.vx*b.vx+b.vy*b.vy);
+        if (spd > ms) { b.vx=b.vx/spd*ms; b.vy=b.vy/spd*ms; }
+
+        b.x += b.vx; b.y += b.vy;
+
+        // Wrap
+        if (b.x < 0) b.x += W; if (b.x > W) b.x -= W;
+        if (b.y < 0) b.y += H; if (b.y > H) b.y -= H;
+
+        // Trail
+        b.trail.push({x:b.x, y:b.y});
+        if (b.trail.length > 12) b.trail.shift();
+      }
+    },
+    draw(ctx) {
+      ctx.fillStyle = 'rgba(10,10,18,0.15)';
+      ctx.fillRect(0, 0, W, H);
+
+      for (let i = 0; i < boids.length; i++) {
+        const b = boids[i];
+        const angle = Math.atan2(b.vy, b.vx);
+        const hue = (i / N * 360 + 160) % 360;
+
+        // Trail
+        if (b.trail.length > 1) {
+          ctx.beginPath();
+          ctx.moveTo(b.trail[0].x, b.trail[0].y);
+          for (let j = 1; j < b.trail.length; j++) {
+            ctx.lineTo(b.trail[j].x, b.trail[j].y);
+          }
+          ctx.strokeStyle = hsl(hue, 60, 40);
+          ctx.lineWidth = 1;
+          ctx.globalAlpha = 0.3;
+          ctx.stroke();
+          ctx.globalAlpha = 1;
+        }
+
+        // Body
+        ctx.save();
+        ctx.translate(b.x, b.y);
+        ctx.rotate(angle);
+        ctx.beginPath();
+        ctx.moveTo(7, 0);
+        ctx.lineTo(-4, 3.5);
+        ctx.lineTo(-3, 0);
+        ctx.lineTo(-4, -3.5);
+        ctx.closePath();
+        ctx.fillStyle = hsl(hue, 80, 60);
+        ctx.fill();
+        ctx.restore();
+      }
+    },
+    resize() { init(); },
+    destroy() {
+      canvas.removeEventListener('mousemove', onMM);
+      canvas.removeEventListener('mouseleave', onML);
+      delete window._boids_init;
+    }
+  };
+};
+
+// ---- 6. Mandelbrot Explorer ----
+sims.fractal = function() {
+  setTitle('Mandelbrot Explorer');
+  setDescription("<strong>Mandelbrot Set</strong> — Iterate <span class='rule'>z = z\u00B2 + c</span> for each point c in the complex plane. If the value stays bounded, the point is in the set. This single equation creates infinite self-similar detail at every scale. Scroll to zoom. Click to recenter. Toggle Julia mode to explore connected Julia sets.");
+
+  let centerX = -0.5, centerY = 0, zoom = 200, maxIter = 150;
+  let julia = false, jcx = -0.7, jcy = 0.27015;
+  let needsRedraw = true;
+  let imgData = null;
+  let smoothZoom = zoom, targetZoom = zoom;
+  let smoothCX = centerX, smoothCY = centerY;
+  const mbOffCanvas = document.createElement('canvas');
+  const mbOffCtx = mbOffCanvas.getContext('2d');
+  // Render at half-res for performance
+  const renderScale = 0.5;
+
+  function render() {
+    const w = Math.ceil(W * renderScale), h = Math.ceil(H * renderScale);
+    if (!imgData || imgData.width !== w || imgData.height !== h) {
+      mbOffCanvas.width = w; mbOffCanvas.height = h;
+      imgData = mbOffCtx.createImageData(w, h);
+    }
+    const d = imgData.data;
+    const z = smoothZoom * renderScale;
+    const cx = smoothCX, cy = smoothCY;
+
+    for (let py = 0; py < h; py++) {
+      for (let px = 0; px < w; px++) {
+        const x0 = (px - w/2) / z + cx;
+        const y0 = (py - h/2) / z + cy;
+        let x, y, cr, ci;
+
+        if (julia) {
+          x = x0; y = y0; cr = jcx; ci = jcy;
+        } else {
+          x = 0; y = 0; cr = x0; ci = y0;
+        }
+
+        let iter = 0;
+        while (x*x + y*y < 4 && iter < maxIter) {
+          const xt = x*x - y*y + cr;
+          y = 2*x*y + ci;
+          x = xt;
+          iter++;
+        }
+
+        const idx = (py * w + px) * 4;
+        if (iter === maxIter) {
+          d[idx] = 0; d[idx+1] = 0; d[idx+2] = 0;
+        } else {
+          // Smooth coloring
+          const log2 = Math.log(2);
+          const nu = Math.log(Math.log(x*x+y*y)/log2)/log2;
+          const t = (iter + 1 - nu) / maxIter;
+          const hue = t * 360 * 3 + 200;
+          const sat = 80;
+          const l = 10 + t * 60;
+          // HSL to RGB
+          const hp = ((hue % 360) + 360) % 360;
+          const c2 = (1 - Math.abs(2*l/100-1)) * sat/100;
+          const xx = c2 * (1 - Math.abs((hp/60)%2-1));
+          const m = l/100 - c2/2;
+          let r1,g1,b1;
+          if (hp<60){r1=c2;g1=xx;b1=0}
+          else if(hp<120){r1=xx;g1=c2;b1=0}
+          else if(hp<180){r1=0;g1=c2;b1=xx}
+          else if(hp<240){r1=0;g1=xx;b1=c2}
+          else if(hp<300){r1=xx;g1=0;b1=c2}
+          else{r1=c2;g1=0;b1=xx}
+          d[idx]=(r1+m)*255; d[idx+1]=(g1+m)*255; d[idx+2]=(b1+m)*255;
+        }
+        d[idx+3] = 255;
+      }
+    }
+    mbOffCtx.putImageData(imgData, 0, 0);
+    ctx.save();
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(mbOffCanvas, 0, 0, w, h, 0, 0, W, H);
+    ctx.restore();
+  }
+
+  const onWheel = (e) => {
+    e.preventDefault();
+    const factor = e.deltaY < 0 ? 1.3 : 0.77;
+    targetZoom *= factor;
+    maxIter = Math.floor(80 + Math.log2(targetZoom) * 20);
+    needsRedraw = true;
+  };
+
+  const onClickF = (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const px = e.clientX - rect.left, py = e.clientY - rect.top;
+    smoothCX += (px - W/2) / smoothZoom;
+    smoothCY += (py - H/2) / smoothZoom;
+    centerX = smoothCX; centerY = smoothCY;
+    needsRedraw = true;
+  };
+
+  canvas.addEventListener('wheel', onWheel, {passive: false});
+  canvas.addEventListener('click', onClickF);
+
+  setControls(`
+    <h3>Controls</h3>
+    <div class="ctrl-group">
+      <label>Max Iterations <span id="mb-iter">${maxIter}</span></label>
+      <input type="range" min="50" max="500" value="${maxIter}" oninput="window._mb_iter=+this.value;document.getElementById('mb-iter').textContent=this.value;window._mb_redraw=true">
+    </div>
+    <div class="ctrl-group">
+      <label>Mode</label>
+      <select onchange="window._mb_julia=this.value==='julia';window._mb_redraw=true">
+        <option value="mandelbrot">Mandelbrot</option>
+        <option value="julia">Julia Set</option>
+      </select>
+    </div>
+    <div class="ctrl-group">
+      <label>Julia C real <span id="mb-jcx">${jcx}</span></label>
+      <input type="range" min="-2" max="2" step="0.01" value="${jcx}" oninput="window._mb_jcx=+this.value;document.getElementById('mb-jcx').textContent=(+this.value).toFixed(2);window._mb_redraw=true">
+    </div>
+    <div class="ctrl-group">
+      <label>Julia C imag <span id="mb-jcy">${jcy}</span></label>
+      <input type="range" min="-2" max="2" step="0.01" value="${jcy}" oninput="window._mb_jcy=+this.value;document.getElementById('mb-jcy').textContent=(+this.value).toFixed(2);window._mb_redraw=true">
+    </div>
+    <div class="ctrl-group">
+      <label>Presets</label>
+      <select onchange="const p=window._mb_presets[this.value];window._mb_julia=p.j||false;window._mb_jcx=p.jcx||0;window._mb_jcy=p.jcy||0;window._mb_cx=p.cx;window._mb_cy=p.cy;window._mb_tz=p.z;window._mb_redraw=true">
+        <option value="default">Full Mandelbrot</option>
+        <option value="seahorse">Seahorse Valley</option>
+        <option value="spiral">Spiral</option>
+        <option value="julia1">Julia: Dendrite</option>
+        <option value="julia2">Julia: Rabbit</option>
+        <option value="julia3">Julia: San Marco</option>
+      </select>
+    </div>
+    <button class="ctrl-btn" onclick="window._mb_cx=-0.5;window._mb_cy=0;window._mb_tz=200;window._mb_julia=false;window._mb_redraw=true">Reset</button>
+    <div style="margin-top:10px;font-size:11px;color:var(--text2)">Zoom: <span id="mb-zoom">1</span>x</div>
+  `);
+
+  window._mb_iter = maxIter; window._mb_julia = false;
+  window._mb_jcx = jcx; window._mb_jcy = jcy;
+  window._mb_redraw = true; window._mb_cx = centerX; window._mb_cy = centerY; window._mb_tz = zoom;
+  window._mb_presets = {
+    'default': {cx:-0.5, cy:0, z:200},
+    'seahorse': {cx:-0.747, cy:0.1, z:1500},
+    'spiral': {cx:-0.7463, cy:0.1102, z:8000},
+    'julia1': {cx:0, cy:0, z:200, j:true, jcx:0, jcy:1},
+    'julia2': {cx:0, cy:0, z:200, j:true, jcx:-0.123, jcy:0.745},
+    'julia3': {cx:0, cy:0, z:200, j:true, jcx:-0.75, jcy:0},
+  };
+
+  return {
+    update() {
+      if (window._mb_cx !== undefined) { centerX = window._mb_cx; centerY = window._mb_cy; }
+      if (window._mb_tz !== undefined) targetZoom = window._mb_tz;
+      julia = window._mb_julia;
+      jcx = window._mb_jcx; jcy = window._mb_jcy;
+      maxIter = window._mb_iter;
+
+      // Smooth zoom
+      smoothZoom += (targetZoom - smoothZoom) * 0.15;
+      smoothCX += (centerX - smoothCX) * 0.15;
+      smoothCY += (centerY - smoothCY) * 0.15;
+
+      if (window._mb_redraw || Math.abs(smoothZoom - targetZoom) > 0.5 || Math.abs(smoothCX - centerX) > 0.0001) {
+        render();
+        document.getElementById('mb-zoom').textContent = (smoothZoom / 200).toFixed(1);
+        window._mb_redraw = false;
+      }
+    },
+    draw() {},
+    resize() { imgData = null; needsRedraw = true; window._mb_redraw = true; },
+    destroy() {
+      canvas.removeEventListener('wheel', onWheel);
+      canvas.removeEventListener('click', onClickF);
+    }
+  };
+};
+
+// ============================================================
+//  INIT
+// ============================================================
+resize();
+switchSim('automata');
+</script>
+</body>
+</html>
