@@ -11,6 +11,11 @@
     --text:#e0e0f0;--text2:#8888aa;--accent:#6c63ff;--accent2:#ff6584;
     --accent3:#43e97b;--accent4:#38f9d7;--glow:rgba(108,99,255,.3);
   }
+  [data-theme="light"]{
+    --bg:#f0f0f5;--surface:#ffffff;--surface2:#e8e8f0;--border:#d0d0dd;
+    --text:#1a1a2e;--text2:#6666888;--accent:#5b52e6;--accent2:#e0506c;
+    --accent3:#2bb563;--accent4:#20b8a8;--glow:rgba(91,82,230,.2);
+  }
   html,body{height:100%;overflow:hidden;font-family:'SF Pro Display','Segoe UI','Ubuntu',sans-serif;background:var(--bg);color:var(--text)}
 
   /* --- Layout --- */
@@ -208,6 +213,32 @@
   #canvas-wrap.transitioning canvas{opacity:0.3;transition:opacity .15s}
   #canvas-wrap canvas{transition:opacity .3s ease}
 
+  /* --- Tour --- */
+  #tour-overlay{
+    position:fixed;inset:0;z-index:90;background:rgba(10,10,18,.7);
+    display:flex;align-items:center;justify-content:center;
+    opacity:0;pointer-events:none;transition:opacity .3s;
+  }
+  #tour-overlay.visible{opacity:1;pointer-events:auto}
+  #tour-card{
+    background:var(--surface);border:1px solid var(--border);border-radius:16px;
+    padding:28px 36px;max-width:420px;width:90%;text-align:center;
+    box-shadow:0 24px 64px rgba(0,0,0,.5);transform:scale(.95);transition:transform .3s;
+  }
+  #tour-overlay.visible #tour-card{transform:scale(1)}
+  #tour-card h2{font-size:20px;font-weight:700;margin-bottom:8px;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+  #tour-card p{font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:16px}
+  #tour-card .tour-step{font-size:11px;color:var(--text2);margin-bottom:16px}
+  #tour-card .tour-tips{text-align:left;font-size:12px;color:var(--text2);line-height:1.8}
+  #tour-card .tour-tips span{color:var(--accent4)}
+  #tour-card button{
+    padding:10px 28px;border:none;border-radius:8px;cursor:pointer;font-family:inherit;font-size:13px;font-weight:600;
+    background:linear-gradient(135deg,var(--accent),#8b5cf6);color:#fff;transition:opacity .15s;margin-top:8px;
+  }
+  #tour-card button:hover{opacity:.85}
+  #tour-card button.tour-skip{background:transparent;color:var(--text2);border:1px solid var(--border);margin-left:8px}
+
   /* --- Mobile --- */
   @media(max-width:768px){
     #sidebar{position:fixed;left:0;top:0;bottom:0;z-index:50;box-shadow:8px 0 32px rgba(0,0,0,.5)}
@@ -269,6 +300,7 @@
     </div>
     <div id="sidebar-footer">
       <button onclick="takeScreenshot()" title="Save screenshot">&#128247; Save</button>
+      <button onclick="toggleTheme()" title="Toggle theme (T)" id="theme-btn">&#9790; Theme</button>
       <button onclick="toggleHelp()" title="Keyboard shortcuts">&#63; Help</button>
     </div>
   </nav>
@@ -276,11 +308,11 @@
   <!-- Main -->
   <div id="main">
     <div id="topbar">
-      <button class="topbar-btn" id="toggle-sidebar" onclick="toggleSidebar()" title="Toggle sidebar (S)">&#9776;</button>
+      <button class="topbar-btn" id="toggle-sidebar" onclick="toggleSidebar()" title="Toggle sidebar (S)" aria-label="Toggle sidebar">&#9776;</button>
       <span id="sim-title">Elementary Cellular Automata</span>
       <span id="fps-counter">-- fps</span>
-      <button class="topbar-btn" onclick="takeScreenshot()" title="Screenshot (P)">&#128247;</button>
-      <button class="topbar-btn" onclick="toggleFullscreen()" title="Fullscreen (F)">&#x26F6;</button>
+      <button class="topbar-btn" onclick="takeScreenshot()" title="Screenshot (P)" aria-label="Take screenshot">&#128247;</button>
+      <button class="topbar-btn" onclick="toggleFullscreen()" title="Fullscreen (F)" aria-label="Toggle fullscreen">&#x26F6;</button>
     </div>
     <div id="canvas-wrap">
       <canvas id="canvas"></canvas>
@@ -295,8 +327,26 @@
 <!-- Toast -->
 <div id="toast"></div>
 
+<!-- Tour -->
+<div id="tour-overlay">
+  <div id="tour-card">
+    <h2>Welcome to Emergence</h2>
+    <p>Explore how complexity arises from simple rules through six interactive simulations.</p>
+    <div class="tour-tips">
+      <span>1-6</span> Switch simulations<br>
+      <span>Space</span> Pause / Play<br>
+      <span>Click</span> Interact with simulations<br>
+      <span>?</span> All keyboard shortcuts
+    </div>
+    <div style="margin-top:18px">
+      <button onclick="closeTour()">Start Exploring</button>
+      <button class="tour-skip" onclick="closeTour(true)">Don't show again</button>
+    </div>
+  </div>
+</div>
+
 <!-- Help overlay -->
-<div id="help-overlay" onclick="if(event.target===this)toggleHelp()">
+<div id="help-overlay" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts" onclick="if(event.target===this)toggleHelp()">
   <div id="help-content">
     <h2>Keyboard Shortcuts</h2>
     <div class="help-row"><span class="help-desc">Elementary Automata</span><span class="help-key">1</span></div>
@@ -308,6 +358,7 @@
     <div class="help-row" style="margin-top:8px;border-top:1px solid var(--border);padding-top:10px"><span class="help-desc">Toggle sidebar</span><span class="help-key">S</span></div>
     <div class="help-row"><span class="help-desc">Fullscreen</span><span class="help-key">F</span></div>
     <div class="help-row"><span class="help-desc">Screenshot</span><span class="help-key">P</span></div>
+    <div class="help-row"><span class="help-desc">Toggle theme</span><span class="help-key">T</span></div>
     <div class="help-row"><span class="help-desc">Toggle controls panel</span><span class="help-key">C</span></div>
     <div class="help-row"><span class="help-desc">Pause / Play</span><span class="help-key">Space</span></div>
     <div class="help-row"><span class="help-desc">This help</span><span class="help-key">?</span></div>
@@ -363,7 +414,11 @@ function toggleFullscreen() {
 }
 
 function toggleHelp() {
-  document.getElementById('help-overlay').classList.toggle('visible');
+  const overlay = document.getElementById('help-overlay');
+  const isOpen = overlay.classList.toggle('visible');
+  if (isOpen) {
+    document.getElementById('help-close').focus();
+  }
 }
 
 function takeScreenshot() {
@@ -378,6 +433,15 @@ function toggleControls() {
   controlsEl.classList.toggle('collapsed-ctrl');
 }
 
+function toggleTheme() {
+  const html = document.documentElement;
+  const isLight = html.getAttribute('data-theme') === 'light';
+  html.setAttribute('data-theme', isLight ? 'dark' : 'light');
+  const btn = document.getElementById('theme-btn');
+  if (btn) btn.innerHTML = isLight ? '&#9790; Theme' : '&#9788; Theme';
+  showToast(isLight ? 'Dark mode' : 'Light mode');
+}
+
 function showToast(msg) {
   const t = document.getElementById('toast');
   t.textContent = msg;
@@ -389,8 +453,11 @@ function showToast(msg) {
 const simNames = ['automata','life','lsystem','reaction','boids','fractal'];
 
 let descTimeout = null;
+let switchTimeout = null;
 
 function switchSim(name) {
+  // Cancel any pending switch to prevent race condition
+  if (switchTimeout) { clearTimeout(switchTimeout); switchTimeout = null; }
   currentSimName = name;
   // Update URL hash for sharing
   history.replaceState(null, '', '#' + name);
@@ -410,8 +477,10 @@ function switchSim(name) {
   // Reset controls visibility
   controlsEl.classList.remove('collapsed-ctrl');
 
-  setTimeout(() => {
+  switchTimeout = setTimeout(() => {
+    switchTimeout = null;
     resize();
+    if (!sims[name]) return; // guard invalid name
     activeSim = sims[name]();
     wrap.classList.remove('transitioning');
     shimmer.classList.add('hide');
@@ -449,6 +518,8 @@ document.addEventListener('keydown', (e) => {
     takeScreenshot();
   } else if (key === '?' || key === '/') {
     toggleHelp();
+  } else if (key === 't' || key === 'T') {
+    toggleTheme();
   } else if (key === 'c' || key === 'C') {
     toggleControls();
   } else if (key === ' ') {
@@ -518,7 +589,14 @@ sims.automata = function() {
     <div class="ctrl-stats">Generation: <span id="eca-gen">0</span></div>
   `);
 
-  window._eca_setRule = (r) => { rule = r; window._eca_rule = r; cellSize = window._eca_cs || cellSize; init(); };
+  window._eca_setRule = (r) => {
+    rule = r; window._eca_rule = r; cellSize = window._eca_cs || cellSize; init();
+    // Sync slider
+    const slider = controlsEl.querySelector('input[type=range]');
+    if (slider) slider.value = r;
+    const rv = document.getElementById('rule-val');
+    if (rv) rv.textContent = r;
+  };
   window._eca_cs = cellSize; window._eca_rule = rule;
   window._eca_pause = () => { paused = !paused; document.getElementById('eca-pause').textContent = paused ? 'Play' : 'Pause'; };
 
@@ -642,7 +720,7 @@ sims.life = function() {
   const onUp = () => { painting=false; };
   canvas.addEventListener('mousedown', onDown);
   canvas.addEventListener('mousemove', onMove);
-  canvas.addEventListener('mouseup', onUp);
+  document.addEventListener('mouseup', onUp);
   canvas.addEventListener('touchstart', onDown, {passive:false});
   canvas.addEventListener('touchmove', onMove, {passive:false});
   canvas.addEventListener('touchend', onUp);
@@ -709,7 +787,7 @@ sims.life = function() {
     destroy() {
       canvas.removeEventListener('mousedown', onDown);
       canvas.removeEventListener('mousemove', onMove);
-      canvas.removeEventListener('mouseup', onUp);
+      document.removeEventListener('mouseup', onUp);
       canvas.removeEventListener('touchstart', onDown);
       canvas.removeEventListener('touchmove', onMove);
       canvas.removeEventListener('touchend', onUp);
@@ -910,7 +988,7 @@ sims.reaction = function() {
   const onUp = () => { dragging = false; };
   canvas.addEventListener('mousedown', onDown);
   canvas.addEventListener('mousemove', onMove);
-  canvas.addEventListener('mouseup', onUp);
+  document.addEventListener('mouseup', onUp);
   canvas.addEventListener('touchstart', onDown, {passive:false});
   canvas.addEventListener('touchmove', onMove, {passive:false});
   canvas.addEventListener('touchend', onUp);
@@ -935,7 +1013,7 @@ sims.reaction = function() {
     </div>
     <div class="ctrl-group">
       <label>Presets</label>
-      <select onchange="const p=window._rd_presets[this.value];window._rd_f=p.f;window._rd_k=p.k;document.getElementById('rd-f').textContent=p.f;document.getElementById('rd-k').textContent=p.k;window._rd_init()">
+      <select onchange="const p=window._rd_presets[this.value];window._rd_f=p.f;window._rd_k=p.k;document.getElementById('rd-f').textContent=p.f.toFixed(3);document.getElementById('rd-k').textContent=p.k.toFixed(3);const s=this.closest('#controls').querySelectorAll('input[type=range]');if(s[0])s[0].value=p.f;if(s[1])s[1].value=p.k;window._rd_init()">
         ${Object.keys(presetParams).map(k => `<option value="${k}">${k.charAt(0).toUpperCase()+k.slice(1)}</option>`).join('')}
       </select>
     </div>
@@ -983,7 +1061,7 @@ sims.reaction = function() {
     destroy() {
       canvas.removeEventListener('mousedown', onDown);
       canvas.removeEventListener('mousemove', onMove);
-      canvas.removeEventListener('mouseup', onUp);
+      document.removeEventListener('mouseup', onUp);
       canvas.removeEventListener('touchstart', onDown);
       canvas.removeEventListener('touchmove', onMove);
       canvas.removeEventListener('touchend', onUp);
@@ -1343,7 +1421,7 @@ sims.fractal = function() {
   canvas.addEventListener('wheel', onWheel, {passive: false});
   canvas.addEventListener('mousedown', onMouseDown);
   canvas.addEventListener('mousemove', onMouseMove);
-  canvas.addEventListener('mouseup', onMouseUp);
+  document.addEventListener('mouseup', onMouseUp);
   canvas.addEventListener('touchstart', onTouchStart, {passive:false});
   canvas.addEventListener('touchmove', onTouchMove, {passive:false});
   canvas.addEventListener('touchend', onTouchEnd);
@@ -1382,7 +1460,7 @@ sims.fractal = function() {
     </div>
     <div class="ctrl-group">
       <label>Presets</label>
-      <select onchange="const p=window._mb_presets[this.value];window._mb_julia=p.j||false;window._mb_jcx=p.jcx||0;window._mb_jcy=p.jcy||0;window._mb_cx=p.cx;window._mb_cy=p.cy;window._mb_tz=p.z;window._mb_redraw=true">
+      <select onchange="window._mb_loadPreset(this.value)">
         <option value="default">Full Mandelbrot</option>
         <option value="seahorse">Seahorse Valley</option>
         <option value="spiral">Spiral</option>
@@ -1394,12 +1472,42 @@ sims.fractal = function() {
       </select>
     </div>
     <button class="ctrl-btn" onclick="window._mb_cx=-0.5;window._mb_cy=0;window._mb_tz=200;window._mb_julia=false;window._mb_redraw=true">Reset</button>
+    <button class="ctrl-btn secondary" style="margin-top:6px" onclick="window._mb_share()">Copy Share Link</button>
     <div class="ctrl-stats">
       Zoom: <span id="mb-zoom">1.0</span>x<br>
       Center: <span id="mb-coords">-0.5 + 0i</span>
     </div>
   `);
 
+  window._mb_share = () => {
+    const params = new URLSearchParams();
+    params.set('cx', smoothCX.toFixed(10));
+    params.set('cy', smoothCY.toFixed(10));
+    params.set('z', Math.round(smoothZoom));
+    params.set('i', maxIter);
+    if (julia) { params.set('j','1'); params.set('jx', jcx); params.set('jy', jcy); }
+    if (colorScheme) params.set('cs', colorScheme);
+    const url = location.origin + location.pathname + '#fractal?' + params.toString();
+    navigator.clipboard.writeText(url).then(() => showToast('Link copied!')).catch(() => {
+      // Fallback
+      prompt('Copy this link:', url);
+    });
+  };
+  window._mb_loadPreset = (key) => {
+    const p = window._mb_presets[key]; if (!p) return;
+    window._mb_julia = p.j || false; window._mb_jcx = p.jcx || 0; window._mb_jcy = p.jcy || 0;
+    window._mb_cx = p.cx; window._mb_cy = p.cy; window._mb_tz = p.z; window._mb_redraw = true;
+    // Sync UI
+    const jcxEl = document.getElementById('mb-jcx'); if (jcxEl) jcxEl.textContent = (p.jcx||0).toFixed(2);
+    const jcyEl = document.getElementById('mb-jcy'); if (jcyEl) jcyEl.textContent = (p.jcy||0).toFixed(2);
+    // Sync sliders
+    const sliders = controlsEl.querySelectorAll('input[type=range]');
+    if (sliders[3]) sliders[3].value = p.jcx || 0; // Julia C real
+    if (sliders[4]) sliders[4].value = p.jcy || 0; // Julia C imag
+    // Sync mode dropdown
+    const selects = controlsEl.querySelectorAll('select');
+    if (selects[1]) selects[1].value = p.j ? 'julia' : 'mandelbrot';
+  };
   window._mb_iter = maxIter; window._mb_julia = false; window._mb_cs = 0;
   window._mb_jcx = jcx; window._mb_jcy = jcy;
   window._mb_redraw = true; window._mb_cx = centerX; window._mb_cy = centerY; window._mb_tz = zoom;
@@ -1421,13 +1529,13 @@ sims.fractal = function() {
       julia = window._mb_julia;
       jcx = window._mb_jcx; jcy = window._mb_jcy;
       maxIter = window._mb_iter;
-      colorScheme = window._mb_cs || 0;
+      colorScheme = window._mb_cs !== undefined ? window._mb_cs : 0;
 
       smoothZoom += (targetZoom - smoothZoom) * 0.15;
       smoothCX += (centerX - smoothCX) * 0.15;
       smoothCY += (centerY - smoothCY) * 0.15;
 
-      if (window._mb_redraw || Math.abs(smoothZoom - targetZoom) > 0.5 || Math.abs(smoothCX - centerX) > 0.0001) {
+      if (window._mb_redraw || Math.abs(smoothZoom - targetZoom) > 0.5 || Math.abs(smoothCX - centerX) > 0.0001 || Math.abs(smoothCY - centerY) > 0.0001) {
         render();
         const zoomEl = document.getElementById('mb-zoom');
         const coordsEl = document.getElementById('mb-coords');
@@ -1442,7 +1550,7 @@ sims.fractal = function() {
       canvas.removeEventListener('wheel', onWheel);
       canvas.removeEventListener('mousedown', onMouseDown);
       canvas.removeEventListener('mousemove', onMouseMove);
-      canvas.removeEventListener('mouseup', onMouseUp);
+      document.removeEventListener('mouseup', onMouseUp);
       canvas.removeEventListener('touchstart', onTouchStart);
       canvas.removeEventListener('touchmove', onTouchMove);
       canvas.removeEventListener('touchend', onTouchEnd);
@@ -1450,23 +1558,56 @@ sims.fractal = function() {
       delete window._mb_iter; delete window._mb_julia; delete window._mb_cs;
       delete window._mb_jcx; delete window._mb_jcy; delete window._mb_redraw;
       delete window._mb_cx; delete window._mb_cy; delete window._mb_tz; delete window._mb_presets;
+      delete window._mb_share; delete window._mb_loadPreset;
     }
   };
 };
+
+// Tour
+function closeTour(dontShowAgain) {
+  document.getElementById('tour-overlay').classList.remove('visible');
+  if (dontShowAgain) {
+    try { localStorage.setItem('emergence-tour-done', '1'); } catch(e) {}
+  }
+}
+
+function maybeShowTour() {
+  try {
+    if (localStorage.getItem('emergence-tour-done')) return;
+  } catch(e) {}
+  setTimeout(() => document.getElementById('tour-overlay').classList.add('visible'), 600);
+}
 
 // ============================================================
 //  INIT
 // ============================================================
 resize();
-// Support URL hash navigation (e.g. #boids, #fractal)
-const hashSim = location.hash.slice(1);
+// Support URL hash navigation (e.g. #boids, #fractal, #fractal?cx=...&cy=...&z=...)
+const hashRaw = location.hash.slice(1);
+const hashParts = hashRaw.split('?');
+const hashSim = hashParts[0];
+const hashParams = hashParts[1] ? new URLSearchParams(hashParts[1]) : null;
 switchSim(simNames.includes(hashSim) ? hashSim : 'automata');
+// Restore Mandelbrot state from URL params
+if (hashSim === 'fractal' && hashParams) {
+  setTimeout(() => {
+    if (hashParams.has('cx')) window._mb_cx = +hashParams.get('cx');
+    if (hashParams.has('cy')) window._mb_cy = +hashParams.get('cy');
+    if (hashParams.has('z')) window._mb_tz = +hashParams.get('z');
+    if (hashParams.has('i')) window._mb_iter = +hashParams.get('i');
+    if (hashParams.has('j')) { window._mb_julia = true; window._mb_jcx = +(hashParams.get('jx')||0); window._mb_jcy = +(hashParams.get('jy')||0); }
+    if (hashParams.has('cs')) window._mb_cs = +hashParams.get('cs');
+    window._mb_redraw = true;
+  }, 200);
+}
 window.addEventListener('hashchange', () => {
   const h = location.hash.slice(1);
   if (simNames.includes(h) && h !== currentSimName) switchSim(h);
 });
 // Start with sidebar collapsed on mobile
 if (window.innerWidth <= 768) document.getElementById('sidebar').classList.add('collapsed');
+// Show tour for first-time visitors
+maybeShowTour();
 </script>
 </body>
 </html>
