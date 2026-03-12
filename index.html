@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Emergence — Complexity from Simplicity</title>
 <style>
   *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
@@ -267,7 +267,7 @@
   <nav id="sidebar">
     <div id="sidebar-header">
       <h1>Emergence</h1>
-      <p>Complexity arising from simple rules. Explore six interactive simulations.</p>
+      <p>Complexity arising from simple rules. Explore seven interactive simulations.</p>
     </div>
     <div class="nav-section">
       <h2>Simulations</h2>
@@ -300,6 +300,11 @@
         <div class="icon" style="background:linear-gradient(135deg,#a855f722,#a855f744)">&#8734;</div>
         <div class="label">Mandelbrot Explorer<small>Infinite fractal zoom</small></div>
         <span class="kbd">6</span>
+      </button>
+      <button class="nav-btn" data-sim="ant" onclick="switchSim('ant')">
+        <div class="icon" style="background:linear-gradient(135deg,#ef444422,#ef444444)">&#9654;</div>
+        <div class="label">Langton's Ant<small>Order from chaos</small></div>
+        <span class="kbd">7</span>
       </button>
     </div>
     <div id="sidebar-footer">
@@ -335,9 +340,9 @@
 <div id="tour-overlay">
   <div id="tour-card">
     <h2>Welcome to Emergence</h2>
-    <p>Explore how complexity arises from simple rules through six interactive simulations.</p>
+    <p>Explore how complexity arises from simple rules through seven interactive simulations.</p>
     <div class="tour-tips">
-      <span>1-6</span> Switch simulations<br>
+      <span>1-7</span> Switch simulations<br>
       <span>Space</span> Pause / Play<br>
       <span>Click</span> Interact with simulations<br>
       <span>Swipe</span> Navigate on mobile<br>
@@ -360,12 +365,14 @@
     <div class="help-row"><span class="help-desc">Reaction-Diffusion</span><span class="help-key">4</span></div>
     <div class="help-row"><span class="help-desc">Boids Flocking</span><span class="help-key">5</span></div>
     <div class="help-row"><span class="help-desc">Mandelbrot Explorer</span><span class="help-key">6</span></div>
+    <div class="help-row"><span class="help-desc">Langton's Ant</span><span class="help-key">7</span></div>
     <div class="help-row" style="margin-top:8px;border-top:1px solid var(--border);padding-top:10px"><span class="help-desc">Toggle sidebar</span><span class="help-key">S</span></div>
     <div class="help-row"><span class="help-desc">Fullscreen</span><span class="help-key">F</span></div>
     <div class="help-row"><span class="help-desc">Screenshot</span><span class="help-key">P</span></div>
     <div class="help-row"><span class="help-desc">Toggle theme</span><span class="help-key">T</span></div>
     <div class="help-row"><span class="help-desc">Toggle controls panel</span><span class="help-key">C</span></div>
     <div class="help-row"><span class="help-desc">Pause / Play</span><span class="help-key">Space</span></div>
+    <div class="help-row"><span class="help-desc">Toggle bloom/glow</span><span class="help-key">B</span></div>
     <div class="help-row"><span class="help-desc">This help</span><span class="help-key">?</span></div>
     <button id="help-close" onclick="toggleHelp()">Close</button>
   </div>
@@ -455,7 +462,7 @@ function showToast(msg) {
   t._tid = setTimeout(() => t.classList.remove('visible'), 2000);
 }
 
-const simNames = ['automata','life','lsystem','reaction','boids','fractal'];
+const simNames = ['automata','life','lsystem','reaction','boids','fractal','ant'];
 
 let descTimeout = null;
 let switchTimeout = null;
@@ -505,6 +512,7 @@ function loop(t) {
   try {
     if (activeSim && activeSim.update) activeSim.update(dt, t);
     if (activeSim && activeSim.draw) activeSim.draw(ctx, W, H);
+    applyBloom();
   } catch(e) {
     console.error('Simulation error:', e);
     return; // stop the loop on error
@@ -540,7 +548,7 @@ document.addEventListener('keydown', (e) => {
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
 
   const key = e.key;
-  if (key >= '1' && key <= '6') {
+  if (key >= '1' && key <= '7') {
     switchSim(simNames[+key - 1]);
   } else if (key === 's' || key === 'S') {
     toggleSidebar();
@@ -552,6 +560,9 @@ document.addEventListener('keydown', (e) => {
     toggleHelp();
   } else if (key === 't' || key === 'T') {
     toggleTheme();
+  } else if (key === 'b' || key === 'B') {
+    bloomEnabled = !bloomEnabled;
+    showToast(bloomEnabled ? 'Bloom ON' : 'Bloom OFF');
   } else if (key === 'c' || key === 'C') {
     toggleControls();
   } else if (key === ' ') {
@@ -574,6 +585,34 @@ function setTitle(t) { titleEl.textContent = t; }
 function hsl(h, s, l) { return `hsl(${h},${s}%,${l}%)`; }
 function bgColor() { return getComputedStyle(document.documentElement).getPropertyValue('--bg').trim() || '#0a0a12'; }
 
+// Bloom post-processing
+let bloomEnabled = true;
+const bloomCanvas = document.createElement('canvas');
+const bloomCtx = bloomCanvas.getContext('2d');
+function applyBloom() {
+  if (!bloomEnabled) return;
+  // Render at 1/4 resolution for performance
+  const bw = Math.ceil(W * dpr * 0.25);
+  const bh = Math.ceil(H * dpr * 0.25);
+  if (bloomCanvas.width !== bw || bloomCanvas.height !== bh) {
+    bloomCanvas.width = bw; bloomCanvas.height = bh;
+  }
+  bloomCtx.clearRect(0, 0, bw, bh);
+  bloomCtx.drawImage(canvas, 0, 0, bw, bh);
+  bloomCtx.filter = 'blur(6px)';
+  bloomCtx.drawImage(bloomCanvas, 0, 0);
+  bloomCtx.filter = 'none';
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.globalAlpha = 0.2;
+  ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(bloomCanvas, 0, 0, bw, bh, 0, 0, canvas.width, canvas.height);
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.restore();
+}
+
 // ============================================================
 //  SIMULATIONS
 // ============================================================
@@ -586,6 +625,7 @@ sims.automata = function() {
 
   let rule = 30, cellSize = 3, cells, row, generation;
   let paused = false;
+  let colorMode = 0; // 0=rainbow, 1=fire, 2=ocean, 3=matrix
 
   function init() {
     const cols = Math.ceil(W / cellSize);
@@ -618,6 +658,15 @@ sims.automata = function() {
         <option value="73">Rule 73 — Complex</option>
       </select>
     </div>
+    <div class="ctrl-group">
+      <label>Color Mode</label>
+      <select onchange="window._eca_cm=+this.value">
+        <option value="0">Rainbow</option>
+        <option value="1">Fire</option>
+        <option value="2">Ocean</option>
+        <option value="3">Matrix</option>
+      </select>
+    </div>
     <button class="ctrl-btn" onclick="window._eca_setRule(Math.floor(Math.random()*256))">Random Rule</button>
     <button class="ctrl-btn secondary" style="margin-top:6px" onclick="window._eca_setRule(window._eca_rule)">Reset</button>
     <button class="ctrl-btn secondary" style="margin-top:6px" id="eca-pause" onclick="window._eca_pause()">Pause</button>
@@ -632,7 +681,7 @@ sims.automata = function() {
     const rv = document.getElementById('rule-val');
     if (rv) rv.textContent = r;
   };
-  window._eca_cs = cellSize; window._eca_rule = rule;
+  window._eca_cs = cellSize; window._eca_rule = rule; window._eca_cm = 0;
   window._eca_pause = () => { paused = !paused; document.getElementById('eca-pause').textContent = paused ? 'Play' : 'Pause'; };
 
   init();
@@ -647,8 +696,21 @@ sims.automata = function() {
       for (let s = 0; s < steps && row < maxRows; s++) {
         for (let x = 0; x < cols; x++) {
           if (cells[x]) {
-            const h = (260 + generation * 0.5 + x * 0.1) % 360;
-            ctx.fillStyle = hsl(h, 80, 55);
+            const cm = window._eca_cm || 0;
+            let h, s, l;
+            if (cm === 0) { // Rainbow flow
+              h = (260 + generation * 0.5 + x * 0.1) % 360; s = 80; l = 55;
+            } else if (cm === 1) { // Fire
+              const t = ((generation * 0.3 + x * 0.2) % 100) / 100;
+              h = t * 40; s = 90 + t * 10; l = 30 + t * 40;
+            } else if (cm === 2) { // Ocean
+              const t = ((generation * 0.4 + x * 0.15) % 100) / 100;
+              h = 200 + t * 40; s = 70 + t * 20; l = 30 + t * 35;
+            } else { // Matrix
+              h = 120 + Math.sin(generation * 0.02 + x * 0.03) * 15;
+              s = 80; l = 35 + Math.sin(generation * 0.05 + x * 0.1) * 20;
+            }
+            ctx.fillStyle = hsl(h, s, l);
             ctx.fillRect(x * cellSize, row * cellSize, cellSize, cellSize);
           }
         }
@@ -674,7 +736,7 @@ sims.automata = function() {
     draw() {},
     resize() { init(); },
     togglePause() { window._eca_pause(); },
-    destroy() { delete window._eca_setRule; delete window._eca_pause; delete window._eca_cs; delete window._eca_rule; }
+    destroy() { delete window._eca_setRule; delete window._eca_pause; delete window._eca_cs; delete window._eca_rule; delete window._eca_cm; }
   };
 };
 
@@ -687,6 +749,7 @@ sims.life = function() {
   let cols, rows, grid, gridB, gen = 0;
   let painting = false, paintVal = 1;
   let ages;
+  let cooling; // death fade: 1.0 when just died, fades to 0
   let running = true;
   let population = 0;
 
@@ -695,6 +758,7 @@ sims.life = function() {
     grid = new Uint8Array(cols * rows);
     gridB = new Uint8Array(cols * rows);
     ages = new Float32Array(cols * rows);
+    cooling = new Float32Array(cols * rows);
     gen = 0; population = 0;
     const cx = Math.floor(cols/2), cy = Math.floor(rows/2);
 
@@ -742,7 +806,8 @@ sims.life = function() {
         const n = grid[i-cols-1]+grid[i-cols]+grid[i-cols+1]+grid[i-1]+grid[i+1]+grid[i+cols-1]+grid[i+cols]+grid[i+cols+1];
         if (grid[i]) { gridB[i] = (n===2||n===3)?1:0; }
         else { gridB[i] = n===3?1:0; }
-        if (gridB[i]) { ages[i] = grid[i] ? ages[i]+1 : 1; population++; } else ages[i] = 0;
+        if (gridB[i]) { ages[i] = grid[i] ? ages[i]+1 : 1; population++; cooling[i] = 0; }
+        else { if (grid[i]) cooling[i] = 1; ages[i] = 0; }
       }
     }
     [grid, gridB] = [gridB, grid];
@@ -812,12 +877,22 @@ sims.life = function() {
       ctx.fillRect(0, 0, W, H);
       for (let y = 0; y < rows; y++) {
         for (let x = 0; x < cols; x++) {
-          if (grid[y*cols+x]) {
-            const age = Math.min(ages[y*cols+x], 200);
-            const h = (140 + age * 1.2) % 360;
-            const l = 40 + Math.min(age, 60) * 0.3;
-            ctx.fillStyle = hsl(h, 75, l);
+          const i = y*cols+x;
+          if (grid[i]) {
+            const age = Math.min(ages[i], 200);
+            const h = (140 + age * 1.5) % 360;
+            const s = 70 + Math.min(age, 40);
+            const l = 42 + Math.min(age, 80) * 0.25;
+            ctx.fillStyle = hsl(h, s, l);
             ctx.fillRect(x*cs, y*cs, cs-0.5, cs-0.5);
+          } else if (cooling[i] > 0.05) {
+            // Death fade — recently dead cells glow dimly
+            const c = cooling[i];
+            ctx.fillStyle = hsl(0, 50, 15 + c * 25);
+            ctx.globalAlpha = c * 0.6;
+            ctx.fillRect(x*cs, y*cs, cs-0.5, cs-0.5);
+            ctx.globalAlpha = 1;
+            cooling[i] *= 0.88; // exponential decay
           }
         }
       }
@@ -936,16 +1011,24 @@ sims.lsystem = function() {
       const oy = (H - ph*scale)/2 - minY*scale;
 
       const count = Math.floor(animProgress);
-      ctx.lineWidth = 1.2;
       ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+
+      // Find max depth for normalization
+      let maxDepth = 1;
+      for (let i = 0; i < count; i++) maxDepth = Math.max(maxDepth, segs[i].depth);
 
       for (let i = 0; i < count; i++) {
         const s = segs[i];
         const t = i / total;
+        const depth = Math.min(s.depth, 12);
+        const depthNorm = depth / maxDepth;
         const h = (t * 300 + 160) % 360;
-        const depth = Math.min(s.depth, 8);
-        ctx.strokeStyle = hsl(h, 70 + depth*3, 45 + depth*4);
-        ctx.globalAlpha = 0.7 + 0.3 * (1 - t);
+
+        // Organic stroke width: thick trunk, thin branches
+        ctx.lineWidth = Math.max(0.5, 3.5 - depthNorm * 3);
+        ctx.strokeStyle = hsl(h, 65 + depthNorm * 25, 35 + depthNorm * 30);
+        ctx.globalAlpha = 0.75 + 0.25 * (1 - depthNorm);
         ctx.beginPath();
         ctx.moveTo(s.x1*scale+ox, s.y1*scale+oy);
         ctx.lineTo(s.x2*scale+ox, s.y2*scale+oy);
@@ -1265,47 +1348,78 @@ sims.boids = function() {
       ctx.fillStyle = bg === '#0a0a12' ? 'rgba(10,10,18,0.15)' : 'rgba(240,240,245,0.15)';
       ctx.fillRect(0, 0, W, H);
 
+      const ms = window._boids_spd || 3.5;
       for (let i = 0; i < boids.length; i++) {
         const b = boids[i];
         const angle = Math.atan2(b.vy, b.vx);
+        const spd = Math.sqrt(b.vx*b.vx + b.vy*b.vy);
+        const spdNorm = Math.min(spd / ms, 1);
         const hue = (i / N * 360 + 160) % 360;
+        const bright = 45 + spdNorm * 25;
 
-        if (b.tLen > 1) {
-          ctx.beginPath();
+        // Smooth curved trail with quadratic bezier
+        if (b.tLen > 2) {
           const start = (b.tHead - b.tLen + TRAIL_LEN) % TRAIL_LEN;
+          ctx.beginPath();
           ctx.moveTo(b.trail[start * 2], b.trail[start * 2 + 1]);
-          for (let j = 1; j < b.tLen; j++) {
-            const idx = (start + j) % TRAIL_LEN;
-            ctx.lineTo(b.trail[idx * 2], b.trail[idx * 2 + 1]);
+          for (let j = 1; j < b.tLen - 1; j++) {
+            const ci = (start + j) % TRAIL_LEN;
+            const ni = (start + j + 1) % TRAIL_LEN;
+            const cpx = b.trail[ci * 2], cpy = b.trail[ci * 2 + 1];
+            const nx = (cpx + b.trail[ni * 2]) * 0.5, ny = (cpy + b.trail[ni * 2 + 1]) * 0.5;
+            ctx.quadraticCurveTo(cpx, cpy, nx, ny);
           }
-          ctx.strokeStyle = hsl(hue, 60, 40);
-          ctx.lineWidth = 1;
-          ctx.globalAlpha = 0.3;
+          const last = (b.tHead - 1 + TRAIL_LEN) % TRAIL_LEN;
+          ctx.lineTo(b.trail[last * 2], b.trail[last * 2 + 1]);
+          ctx.strokeStyle = hsl(hue, 60 + spdNorm * 20, 30 + spdNorm * 20);
+          ctx.lineWidth = 1 + spdNorm;
+          ctx.globalAlpha = 0.35;
           ctx.stroke();
           ctx.globalAlpha = 1;
         }
 
+        // Boid body — sleek triangle
         ctx.save();
         ctx.translate(b.x, b.y);
         ctx.rotate(angle);
+        const sz = 5 + spdNorm * 3;
         ctx.beginPath();
-        ctx.moveTo(7, 0);
-        ctx.lineTo(-4, 3.5);
-        ctx.lineTo(-3, 0);
-        ctx.lineTo(-4, -3.5);
+        ctx.moveTo(sz, 0);
+        ctx.lineTo(-sz * 0.55, sz * 0.45);
+        ctx.lineTo(-sz * 0.35, 0);
+        ctx.lineTo(-sz * 0.55, -sz * 0.45);
         ctx.closePath();
-        ctx.fillStyle = hsl(hue, 80, 60);
+        ctx.fillStyle = hsl(hue, 85, bright);
         ctx.fill();
+
+        // Glow dot at the tip
+        ctx.beginPath();
+        ctx.arc(sz * 0.5, 0, 1.5 + spdNorm, 0, Math.PI * 2);
+        ctx.fillStyle = hsl(hue, 90, 80);
+        ctx.globalAlpha = 0.6 + spdNorm * 0.4;
+        ctx.fill();
+        ctx.globalAlpha = 1;
         ctx.restore();
       }
 
-      // Predator indicator
-      if (predatorMode && mouseActive) {
+      // Mouse attractor/repulsor indicator
+      if (mouseActive) {
         ctx.beginPath();
         ctx.arc(mouseX, mouseY, 200, 0, Math.PI*2);
-        ctx.strokeStyle = 'rgba(255,80,80,0.3)';
-        ctx.lineWidth = 2;
-        ctx.stroke();
+        if (predatorMode) {
+          ctx.strokeStyle = 'rgba(255,60,60,0.4)';
+          ctx.lineWidth = 3;
+          // Danger rings
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.arc(mouseX, mouseY, 140, 0, Math.PI*2);
+          ctx.strokeStyle = 'rgba(255,60,60,0.2)';
+          ctx.stroke();
+        } else {
+          ctx.strokeStyle = 'rgba(108,99,255,0.15)';
+          ctx.lineWidth = 1;
+          ctx.stroke();
+        }
       }
     },
     resize() { init(); },
@@ -1634,6 +1748,181 @@ sims.fractal = function() {
       delete window._mb_jcx; delete window._mb_jcy; delete window._mb_redraw;
       delete window._mb_cx; delete window._mb_cy; delete window._mb_tz; delete window._mb_presets;
       delete window._mb_share; delete window._mb_loadPreset;
+    }
+  };
+};
+
+// ---- 7. Langton's Ant ----
+sims.ant = function() {
+  setTitle("Langton's Ant");
+  setDescription("<strong>Langton's Ant</strong> — A simple automaton on a grid: <span class='rule'>on white, turn right and flip to black; on black, turn left and flip to white</span>. For ~10,000 steps it appears chaotic. Then, suddenly, it self-organizes into a perfect diagonal <span class='rule'>highway</span>. One of the most striking examples of emergent order from simple rules. Multi-color mode adds more states for richer patterns.");
+
+  const cs = 3;
+  let cols, rows, grid, ants, stepCount, stepsPerFrame;
+  let paused = false;
+  let numColors = 2; // RL (classic) — extend to multi-color ants
+  let ruleString = 'RL'; // R = turn right, L = turn left
+  let antCount = 1;
+
+  const DIR = [[0,-1],[1,0],[0,1],[-1,0]]; // N, E, S, W
+
+  const palettes = [
+    // 2-color classic
+    (c, maxC) => {
+      if (c === 0) return null; // background
+      const t = c / maxC;
+      return hsl(280 + t * 200, 75, 45 + t * 25);
+    },
+    // Multi-color vibrant
+    (c, maxC) => {
+      if (c === 0) return null;
+      return hsl((c / maxC) * 360, 85, 55);
+    }
+  ];
+
+  const multiRules = {
+    'RL': 'RL',           // Classic — produces highway
+    'RLR': 'RLR',         // 3-color — triangle growth
+    'LLRR': 'LLRR',       // 4-color — symmetric growth
+    'RLLR': 'RLLR',       // 4-color — fills with pattern
+    'LRRRRRLLR': 'LRRRRRLLR', // 9-color — cardioid
+    'RRLLLRLLLRRR': 'RRLLLRLLLRRR', // 12-color — square growth
+  };
+
+  function init() {
+    cols = Math.ceil(W / cs); rows = Math.ceil(H / cs);
+    grid = new Uint8Array(cols * rows);
+    numColors = ruleString.length;
+    stepCount = 0;
+    stepsPerFrame = Math.floor((cols * rows) / 200); // auto-scale speed
+
+    // Place ants
+    ants = [];
+    const cx = Math.floor(cols / 2), cy = Math.floor(rows / 2);
+    if (antCount === 1) {
+      ants.push({ x: cx, y: cy, dir: 0 });
+    } else {
+      // Multiple ants spread in a circle
+      for (let i = 0; i < antCount; i++) {
+        const a = (i / antCount) * Math.PI * 2;
+        const r = Math.min(cols, rows) * 0.1;
+        ants.push({
+          x: Math.floor(cx + Math.cos(a) * r),
+          y: Math.floor(cy + Math.sin(a) * r),
+          dir: i % 4,
+        });
+      }
+    }
+
+    ctx.fillStyle = bgColor();
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  function step() {
+    for (const ant of ants) {
+      const i = ant.y * cols + ant.x;
+      if (i < 0 || i >= grid.length) continue;
+      const color = grid[i];
+
+      // Turn based on rule character
+      if (ruleString[color] === 'R') {
+        ant.dir = (ant.dir + 1) % 4; // turn right
+      } else {
+        ant.dir = (ant.dir + 3) % 4; // turn left
+      }
+
+      // Flip color (cycle through states)
+      grid[i] = (color + 1) % numColors;
+
+      // Draw the flipped cell
+      const c = grid[i];
+      if (c === 0) {
+        ctx.fillStyle = bgColor();
+      } else {
+        const t = c / numColors;
+        const h = (280 + t * 200) % 360;
+        ctx.fillStyle = hsl(h, 80, 40 + t * 30);
+      }
+      ctx.fillRect(ant.x * cs, ant.y * cs, cs, cs);
+
+      // Move forward with wrapping
+      ant.x = (ant.x + DIR[ant.dir][0] + cols) % cols;
+      ant.y = (ant.y + DIR[ant.dir][1] + rows) % rows;
+    }
+    stepCount++;
+  }
+
+  // Draw ant positions as bright dots
+  function drawAnts() {
+    for (const ant of ants) {
+      ctx.fillStyle = '#ffffff';
+      ctx.shadowColor = 'rgba(255,255,255,0.8)';
+      ctx.shadowBlur = 6;
+      ctx.fillRect(ant.x * cs - 1, ant.y * cs - 1, cs + 2, cs + 2);
+    }
+    ctx.shadowBlur = 0;
+  }
+
+  setControls(`
+    <h3>Controls</h3>
+    <div class="ctrl-group">
+      <label>Speed <span id="ant-speed">${stepsPerFrame || 100}</span> steps/frame</label>
+      <input type="range" min="1" max="2000" value="${stepsPerFrame || 100}" oninput="window._ant_spd=+this.value;document.getElementById('ant-speed').textContent=this.value">
+    </div>
+    <div class="ctrl-group">
+      <label>Rule Pattern</label>
+      <select onchange="window._ant_setRule(this.value)">
+        <option value="RL">RL (Classic Highway)</option>
+        <option value="RLR">RLR (Triangle Growth)</option>
+        <option value="LLRR">LLRR (Symmetric)</option>
+        <option value="RLLR">RLLR (Fill Pattern)</option>
+        <option value="LRRRRRLLR">LRRRRRLLR (Cardioid)</option>
+        <option value="RRLLLRLLLRRR">RRLLLRLLLRRR (Square)</option>
+      </select>
+    </div>
+    <div class="ctrl-group">
+      <label>Number of Ants <span id="ant-count">${antCount}</span></label>
+      <input type="range" min="1" max="8" value="${antCount}" oninput="window._ant_count=+this.value;document.getElementById('ant-count').textContent=this.value">
+    </div>
+    <button class="ctrl-btn" id="ant-pause" onclick="window._ant_pause()">Pause</button>
+    <button class="ctrl-btn secondary" style="margin-top:6px" onclick="window._ant_reset()">Reset</button>
+    <div class="ctrl-stats">
+      Steps: <span id="ant-steps">0</span><br>
+      <span id="ant-phase" style="color:var(--accent3)">Chaotic phase...</span>
+    </div>
+  `);
+
+  window._ant_spd = 100;
+  window._ant_count = antCount;
+  window._ant_setRule = (r) => { ruleString = r; antCount = window._ant_count; init(); };
+  window._ant_reset = () => { antCount = window._ant_count; init(); };
+  window._ant_pause = () => { paused = !paused; document.getElementById('ant-pause').textContent = paused ? 'Play' : 'Pause'; };
+
+  init();
+
+  return {
+    update() {
+      if (paused) return;
+      const spd = window._ant_spd || 100;
+      for (let i = 0; i < spd; i++) step();
+      const stepsEl = document.getElementById('ant-steps');
+      const phaseEl = document.getElementById('ant-phase');
+      if (stepsEl) stepsEl.textContent = stepCount.toLocaleString();
+      if (phaseEl) {
+        if (ruleString === 'RL' && stepCount < 10000) phaseEl.textContent = 'Chaotic phase...';
+        else if (ruleString === 'RL') phaseEl.textContent = 'Highway emerged!';
+        else phaseEl.textContent = numColors + '-color pattern forming';
+      }
+    },
+    draw(ctx) {
+      // Cells are drawn incrementally in step() for performance
+      drawAnts();
+    },
+    resize() { init(); },
+    togglePause() { window._ant_pause(); },
+    destroy() {
+      delete window._ant_spd; delete window._ant_count; delete window._ant_setRule;
+      delete window._ant_reset; delete window._ant_pause;
     }
   };
 };
