@@ -13,7 +13,7 @@
   }
   [data-theme="light"]{
     --bg:#f0f0f5;--surface:#ffffff;--surface2:#e8e8f0;--border:#d0d0dd;
-    --text:#1a1a2e;--text2:#6666888;--accent:#5b52e6;--accent2:#e0506c;
+    --text:#1a1a2e;--text2:#666688;--accent:#5b52e6;--accent2:#e0506c;
     --accent3:#2bb563;--accent4:#20b8a8;--glow:rgba(91,82,230,.2);
   }
   html,body{height:100%;overflow:hidden;font-family:'SF Pro Display','Segoe UI','Ubuntu',sans-serif;background:var(--bg);color:var(--text)}
@@ -89,9 +89,9 @@
 
   /* --- Controls panel --- */
   #controls{
-    position:absolute;top:12px;right:12px;width:260px;background:rgba(18,18,31,.92);
+    position:absolute;top:12px;right:12px;width:260px;background:var(--surface);
     border:1px solid var(--border);border-radius:12px;padding:16px;backdrop-filter:blur(12px);
-    z-index:5;max-height:calc(100vh - 100px);overflow-y:auto;
+    z-index:5;max-height:calc(100vh - 100px);overflow-y:auto;opacity:.95;
     box-shadow:0 8px 32px rgba(0,0,0,.4);transition:opacity .3s,transform .3s;
   }
   #controls h3{font-size:12px;font-weight:600;margin-bottom:12px;color:var(--accent);text-transform:uppercase;letter-spacing:1px}
@@ -126,8 +126,8 @@
   /* --- Description overlay --- */
   #description{
     position:absolute;bottom:16px;left:16px;right:16px;
-    background:rgba(18,18,31,.88);border:1px solid var(--border);border-radius:12px;
-    padding:14px 18px;backdrop-filter:blur(12px);z-index:4;
+    background:var(--surface);border:1px solid var(--border);border-radius:12px;
+    padding:14px 18px;backdrop-filter:blur(12px);z-index:4;opacity:.95;
     font-size:12px;line-height:1.5;color:var(--text2);
     box-shadow:0 4px 24px rgba(0,0,0,.3);transition:opacity .3s,transform .3s;
   }
@@ -243,9 +243,13 @@
   @media(max-width:768px){
     #sidebar{position:fixed;left:0;top:0;bottom:0;z-index:50;box-shadow:8px 0 32px rgba(0,0,0,.5)}
     #sidebar.collapsed{transform:translateX(-280px)}
-    #controls{width:200px;padding:12px;right:8px;top:8px}
-    #controls-toggle{right:8px;top:8px}
+    #controls{width:200px;padding:12px;right:8px;top:8px;font-size:13px}
+    #controls-toggle{right:8px;top:8px;width:40px;height:40px;font-size:18px}
     #description{left:8px;right:8px;bottom:8px}
+    .topbar-btn{padding:8px 10px;font-size:22px}
+    input[type=range]{height:10px}
+    input[type=range]::-webkit-slider-thumb{width:20px;height:20px}
+    .nav-btn{padding:14px 12px}
     .mobile-overlay{
       position:fixed;inset:0;z-index:40;background:rgba(0,0,0,.4);
       opacity:0;pointer-events:none;transition:opacity .3s;
@@ -336,6 +340,7 @@
       <span>1-6</span> Switch simulations<br>
       <span>Space</span> Pause / Play<br>
       <span>Click</span> Interact with simulations<br>
+      <span>Swipe</span> Navigate on mobile<br>
       <span>?</span> All keyboard shortcuts
     </div>
     <div style="margin-top:18px">
@@ -387,7 +392,7 @@ let lastTime = 0, frameCount = 0, fpsTime = 0;
 function resize() {
   dpr = window.devicePixelRatio || 1;
   const rect = canvas.parentElement.getBoundingClientRect();
-  W = rect.width; H = rect.height;
+  W = Math.max(rect.width, 1); H = Math.max(rect.height, 1);
   canvas.width = W * dpr; canvas.height = H * dpr;
   canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -494,13 +499,40 @@ function switchSim(name) {
 }
 
 function loop(t) {
-  animId = requestAnimationFrame(loop);
   const dt = Math.min(t - lastTime, 50); lastTime = t;
   frameCount++;
   if (t - fpsTime > 500) { fpsEl.textContent = Math.round(frameCount / ((t - fpsTime) / 1000)) + ' fps'; frameCount = 0; fpsTime = t; }
-  if (activeSim && activeSim.update) activeSim.update(dt, t);
-  if (activeSim && activeSim.draw) activeSim.draw(ctx, W, H);
+  try {
+    if (activeSim && activeSim.update) activeSim.update(dt, t);
+    if (activeSim && activeSim.draw) activeSim.draw(ctx, W, H);
+  } catch(e) {
+    console.error('Simulation error:', e);
+    return; // stop the loop on error
+  }
+  animId = requestAnimationFrame(loop);
 }
+
+// --- Swipe navigation on mobile ---
+let swipeStartX = 0, swipeStartY = 0, swipeStartTime = 0;
+document.getElementById('canvas-wrap').addEventListener('touchstart', (e) => {
+  if (e.touches.length === 1) {
+    swipeStartX = e.touches[0].clientX;
+    swipeStartY = e.touches[0].clientY;
+    swipeStartTime = Date.now();
+  }
+}, {passive: true});
+document.getElementById('canvas-wrap').addEventListener('touchend', (e) => {
+  if (e.changedTouches.length !== 1) return;
+  const dx = e.changedTouches[0].clientX - swipeStartX;
+  const dy = e.changedTouches[0].clientY - swipeStartY;
+  const dt = Date.now() - swipeStartTime;
+  // Quick horizontal swipe (>80px, <300ms, more horizontal than vertical)
+  if (dt < 300 && Math.abs(dx) > 80 && Math.abs(dx) > Math.abs(dy) * 2) {
+    const idx = simNames.indexOf(currentSimName);
+    if (dx < 0 && idx < simNames.length - 1) { switchSim(simNames[idx + 1]); showToast(simNames[idx + 1]); }
+    else if (dx > 0 && idx > 0) { switchSim(simNames[idx - 1]); showToast(simNames[idx - 1]); }
+  }
+}, {passive: true});
 
 // --- Keyboard shortcuts ---
 document.addEventListener('keydown', (e) => {
@@ -529,6 +561,8 @@ document.addEventListener('keydown', (e) => {
       showToast('Toggled pause');
     }
   } else if (key === 'Escape') {
+    const tour = document.getElementById('tour-overlay');
+    if (tour.classList.contains('visible')) { closeTour(); return; }
     const help = document.getElementById('help-overlay');
     if (help.classList.contains('visible')) toggleHelp();
   }
@@ -538,6 +572,7 @@ function setControls(html) { controlsEl.innerHTML = html; }
 function setDescription(html) { descEl.innerHTML = html + '<button id="desc-close" onclick="this.parentElement.classList.add(\'hidden\')">&#10005;</button>'; descEl.classList.remove('hidden'); }
 function setTitle(t) { titleEl.textContent = t; }
 function hsl(h, s, l) { return `hsl(${h},${s}%,${l}%)`; }
+function bgColor() { return getComputedStyle(document.documentElement).getPropertyValue('--bg').trim() || '#0a0a12'; }
 
 // ============================================================
 //  SIMULATIONS
@@ -557,7 +592,7 @@ sims.automata = function() {
     cells = new Uint8Array(cols);
     cells[Math.floor(cols / 2)] = 1;
     row = 0; generation = 0;
-    ctx.fillStyle = '#0a0a12'; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = bgColor(); ctx.fillRect(0, 0, W, H);
   }
 
   function applyRule(l, c, r) { return (rule >> ((l << 2) | (c << 1) | r)) & 1; }
@@ -631,7 +666,7 @@ sims.automata = function() {
       if (genEl) genEl.textContent = generation;
       if (row >= maxRows) {
         // Smooth fade before restart
-        ctx.fillStyle = 'rgba(10,10,18,0.05)';
+        ctx.fillStyle = document.documentElement.getAttribute('data-theme') === 'light' ? 'rgba(240,240,245,0.05)' : 'rgba(10,10,18,0.05)';
         ctx.fillRect(0, 0, W, H);
         init();
       }
@@ -676,6 +711,13 @@ sims.life = function() {
       g.forEach(([dx,dy]) => { const i = (oy+dy)*cols+(ox+dx); if(i>=0&&i<grid.length) grid[i] = 1; });
     } else if (pattern === 'lwss') {
       [[1,0],[4,0],[0,1],[0,2],[4,2],[0,3],[1,3],[2,3],[3,3]].forEach(([dx,dy]) => { grid[(cy+dy)*cols+(cx+dx)] = 1; });
+    } else if (pattern === 'diehard') {
+      [[6,0],[0,1],[1,1],[1,2],[5,2],[6,2],[7,2]].forEach(([dx,dy]) => { grid[(cy+dy)*cols+(cx+dx)] = 1; });
+    } else if (pattern === 'infinite') {
+      // R-pentomino + extra cells for infinite growth
+      [[0,0],[1,0],[2,0],[3,0],[4,0],[5,0],[6,0],[7,0],[9,0],[10,0],[11,0],[12,0],[13,0],
+       [17,0],[18,0],[19,0],[26,0],[27,0],[28,0],[29,0],[30,0],[31,0],[32,0],
+       [34,0],[35,0],[36,0],[37,0],[38,0]].forEach(([dx,dy]) => { grid[(cy+dy)*cols+(cx-19+dx)] = 1; });
     } else if (pattern === 'pulsar') {
       const p = [[2,0],[3,0],[4,0],[8,0],[9,0],[10,0],
         [0,2],[5,2],[7,2],[12,2],[0,3],[5,3],[7,3],[12,3],[0,4],[5,4],[7,4],[12,4],
@@ -739,6 +781,8 @@ sims.life = function() {
         <option value="glidergun">Gosper Glider Gun</option>
         <option value="lwss">Lightweight Spaceship</option>
         <option value="pulsar">Pulsar</option>
+        <option value="diehard">Diehard</option>
+        <option value="infinite">Infinite Growth</option>
         <option value="random">Random Soup</option>
       </select>
     </div>
@@ -764,7 +808,7 @@ sims.life = function() {
       if (popEl) popEl.textContent = population;
     },
     draw(ctx) {
-      ctx.fillStyle = '#0a0a12';
+      ctx.fillStyle = bgColor();
       ctx.fillRect(0, 0, W, H);
       for (let y = 0; y < rows; y++) {
         for (let x = 0; x < cols; x++) {
@@ -884,7 +928,7 @@ sims.lsystem = function() {
     },
     draw(ctx) {
       if (!drawData) return;
-      ctx.fillStyle = '#0a0a12'; ctx.fillRect(0,0,W,H);
+      ctx.fillStyle = bgColor(); ctx.fillRect(0,0,W,H);
       const {segs, minX, minY, maxX, maxY, total} = drawData;
       const pw = maxX-minX||1, ph = maxY-minY||1;
       const scale = Math.min(W*0.85/pw, H*0.85/ph);
@@ -962,11 +1006,15 @@ sims.reaction = function() {
 
   function step() {
     const dU = 0.21, dV = 0.105;
-    for (let y = 1; y < gh-1; y++) {
-      for (let x = 1; x < gw-1; x++) {
+    for (let y = 0; y < gh; y++) {
+      const ym = y === 0 ? gh-1 : y-1;
+      const yp = y === gh-1 ? 0 : y+1;
+      for (let x = 0; x < gw; x++) {
+        const xm = x === 0 ? gw-1 : x-1;
+        const xp = x === gw-1 ? 0 : x+1;
         const i = y*gw+x;
-        const lapU = u[i-1]+u[i+1]+u[i-gw]+u[i+gw]-4*u[i];
-        const lapV = v[i-1]+v[i+1]+v[i-gw]+v[i+gw]-4*v[i];
+        const lapU = u[y*gw+xm]+u[y*gw+xp]+u[ym*gw+x]+u[yp*gw+x]-4*u[i];
+        const lapV = v[y*gw+xm]+v[y*gw+xp]+v[ym*gw+x]+v[yp*gw+x]-4*v[i];
         const uvv = u[i]*v[i]*v[i];
         uN[i] = u[i] + dU*lapU - uvv + feed*(1-u[i]);
         vN[i] = v[i] + dV*lapV + uvv - (feed+kill)*v[i];
@@ -1081,11 +1129,13 @@ sims.boids = function() {
   let sep = 25, ali = 50, coh = 50, maxSpeed = 3.5, sepW = 1.5, aliW = 1, cohW = 1;
   let paused = false;
 
+  const TRAIL_LEN = 12;
   function createBoid() {
     return {
       x: Math.random()*W, y: Math.random()*H,
       vx: (Math.random()-0.5)*4, vy: (Math.random()-0.5)*4,
-      trail: [],
+      trail: new Float32Array(TRAIL_LEN * 2), // ring buffer [x0,y0,x1,y1,...]
+      tHead: 0, tLen: 0,
     };
   }
 
@@ -1124,12 +1174,30 @@ sims.boids = function() {
       <label>Max Speed <span id="b-spd">${maxSpeed}</span></label>
       <input type="range" min="1" max="8" step="0.5" value="${maxSpeed}" oninput="window._boids_spd=+this.value;document.getElementById('b-spd').textContent=this.value">
     </div>
+    <div class="ctrl-group">
+      <label>Behavior Presets</label>
+      <select onchange="const p=window._boids_presets[this.value];if(!p)return;window._boids_sepW=p.s;window._boids_aliW=p.a;window._boids_cohW=p.c;window._boids_spd=p.v;const sl=document.querySelector('#controls').querySelectorAll('input[type=range]');sl[0].value=p.s;sl[1].value=p.a;sl[2].value=p.c;sl[3].value=p.v;document.getElementById('b-sep').textContent=p.s;document.getElementById('b-ali').textContent=p.a;document.getElementById('b-coh').textContent=p.c;document.getElementById('b-spd').textContent=p.v">
+        <option value="">Custom</option>
+        <option value="balanced">Balanced Flock</option>
+        <option value="tight">Tight School</option>
+        <option value="chaotic">Chaotic Swarm</option>
+        <option value="lazy">Lazy Drift</option>
+        <option value="fast">Speed Demons</option>
+      </select>
+    </div>
     <button class="ctrl-btn" id="boids-pause" onclick="window._boids_pause()">Pause</button>
     <button class="ctrl-btn secondary" style="margin-top:6px" onclick="window._boids_init()">Reset</button>
-    <div class="ctrl-stats">Right-click: predator scare</div>
+    <div class="ctrl-stats">Right-click: predator scare<br>Swipe left/right: switch sims</div>
   `);
 
   window._boids_sepW = sepW; window._boids_aliW = aliW; window._boids_cohW = cohW; window._boids_spd = maxSpeed;
+  window._boids_presets = {
+    'balanced': {s:1.5, a:1, c:1, v:3.5},
+    'tight': {s:0.8, a:2.5, c:2.5, v:2.5},
+    'chaotic': {s:2.5, a:0.3, c:0.3, v:5},
+    'lazy': {s:1, a:1.5, c:1.5, v:1.5},
+    'fast': {s:2, a:1.5, c:0.8, v:7},
+  };
   window._boids_init = init;
   window._boids_pause = () => { paused = !paused; document.getElementById('boids-pause').textContent = paused ? 'Play' : 'Pause'; };
 
@@ -1182,14 +1250,19 @@ sims.boids = function() {
         let wrapped = false;
         if (b.x < 0) { b.x += W; wrapped = true; } else if (b.x > W) { b.x -= W; wrapped = true; }
         if (b.y < 0) { b.y += H; wrapped = true; } else if (b.y > H) { b.y -= H; wrapped = true; }
-        if (wrapped) b.trail.length = 0;
+        if (wrapped) { b.tLen = 0; b.tHead = 0; }
 
-        b.trail.push({x:b.x, y:b.y});
-        if (b.trail.length > 12) b.trail.shift();
+        // Ring buffer trail
+        b.trail[b.tHead * 2] = b.x;
+        b.trail[b.tHead * 2 + 1] = b.y;
+        b.tHead = (b.tHead + 1) % TRAIL_LEN;
+        if (b.tLen < TRAIL_LEN) b.tLen++;
       }
     },
     draw(ctx) {
-      ctx.fillStyle = 'rgba(10,10,18,0.15)';
+      const bg = bgColor();
+      // Semi-transparent fade for trail effect
+      ctx.fillStyle = bg === '#0a0a12' ? 'rgba(10,10,18,0.15)' : 'rgba(240,240,245,0.15)';
       ctx.fillRect(0, 0, W, H);
 
       for (let i = 0; i < boids.length; i++) {
@@ -1197,11 +1270,13 @@ sims.boids = function() {
         const angle = Math.atan2(b.vy, b.vx);
         const hue = (i / N * 360 + 160) % 360;
 
-        if (b.trail.length > 1) {
+        if (b.tLen > 1) {
           ctx.beginPath();
-          ctx.moveTo(b.trail[0].x, b.trail[0].y);
-          for (let j = 1; j < b.trail.length; j++) {
-            ctx.lineTo(b.trail[j].x, b.trail[j].y);
+          const start = (b.tHead - b.tLen + TRAIL_LEN) % TRAIL_LEN;
+          ctx.moveTo(b.trail[start * 2], b.trail[start * 2 + 1]);
+          for (let j = 1; j < b.tLen; j++) {
+            const idx = (start + j) % TRAIL_LEN;
+            ctx.lineTo(b.trail[idx * 2], b.trail[idx * 2 + 1]);
           }
           ctx.strokeStyle = hsl(hue, 60, 40);
           ctx.lineWidth = 1;
@@ -1242,7 +1317,7 @@ sims.boids = function() {
       canvas.removeEventListener('touchstart', onTouch);
       canvas.removeEventListener('touchmove', onTouch);
       canvas.removeEventListener('touchend', onTouchEnd);
-      delete window._boids_init; delete window._boids_pause; delete window._boids_sepW; delete window._boids_aliW; delete window._boids_cohW; delete window._boids_spd;
+      delete window._boids_init; delete window._boids_pause; delete window._boids_sepW; delete window._boids_aliW; delete window._boids_cohW; delete window._boids_spd; delete window._boids_presets;
     }
   };
 };
