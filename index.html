@@ -180,11 +180,40 @@
   ::-webkit-scrollbar-track{background:transparent}
   ::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}
 
+  /* --- Controls toggle --- */
+  #controls-toggle{
+    position:absolute;top:12px;right:12px;z-index:6;width:32px;height:32px;
+    border-radius:8px;border:1px solid var(--border);background:rgba(18,18,31,.92);
+    backdrop-filter:blur(12px);color:var(--text2);cursor:pointer;font-size:14px;
+    display:flex;align-items:center;justify-content:center;transition:all .15s;
+  }
+  #controls-toggle:hover{border-color:var(--accent);color:var(--text)}
+  #controls.collapsed-ctrl{opacity:0;transform:translateX(20px);pointer-events:none}
+
+  /* --- Toast notification --- */
+  #toast{
+    position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);
+    background:var(--surface);border:1px solid var(--border);border-radius:8px;
+    padding:10px 20px;font-size:12px;color:var(--text);z-index:200;
+    box-shadow:0 8px 32px rgba(0,0,0,.4);transition:transform .3s cubic-bezier(.4,0,.2,1);
+    pointer-events:none;
+  }
+  #toast.visible{transform:translateX(-50%) translateY(0)}
+
+  /* --- Active nav icon pulse --- */
+  .nav-btn.active .icon{animation:iconPulse 2s ease-in-out infinite}
+  @keyframes iconPulse{0%,100%{box-shadow:none}50%{box-shadow:0 0 12px rgba(108,99,255,.3)}}
+
+  /* --- Canvas transition --- */
+  #canvas-wrap.transitioning canvas{opacity:0.3;transition:opacity .15s}
+  #canvas-wrap canvas{transition:opacity .3s ease}
+
   /* --- Mobile --- */
   @media(max-width:768px){
     #sidebar{position:fixed;left:0;top:0;bottom:0;z-index:50;box-shadow:8px 0 32px rgba(0,0,0,.5)}
     #sidebar.collapsed{transform:translateX(-280px)}
     #controls{width:200px;padding:12px;right:8px;top:8px}
+    #controls-toggle{right:8px;top:8px}
     #description{left:8px;right:8px;bottom:8px}
     .mobile-overlay{
       position:fixed;inset:0;z-index:40;background:rgba(0,0,0,.4);
@@ -255,12 +284,16 @@
     </div>
     <div id="canvas-wrap">
       <canvas id="canvas"></canvas>
+      <button id="controls-toggle" onclick="toggleControls()" title="Toggle controls (C)">&#9881;</button>
       <div id="controls"></div>
       <div id="description"></div>
       <div class="shimmer" id="shimmer"><div class="shimmer-ring"></div><p>Initializing...</p></div>
     </div>
   </div>
 </div>
+
+<!-- Toast -->
+<div id="toast"></div>
 
 <!-- Help overlay -->
 <div id="help-overlay" onclick="if(event.target===this)toggleHelp()">
@@ -275,6 +308,7 @@
     <div class="help-row" style="margin-top:8px;border-top:1px solid var(--border);padding-top:10px"><span class="help-desc">Toggle sidebar</span><span class="help-key">S</span></div>
     <div class="help-row"><span class="help-desc">Fullscreen</span><span class="help-key">F</span></div>
     <div class="help-row"><span class="help-desc">Screenshot</span><span class="help-key">P</span></div>
+    <div class="help-row"><span class="help-desc">Toggle controls panel</span><span class="help-key">C</span></div>
     <div class="help-row"><span class="help-desc">Pause / Play</span><span class="help-key">Space</span></div>
     <div class="help-row"><span class="help-desc">This help</span><span class="help-key">?</span></div>
     <button id="help-close" onclick="toggleHelp()">Close</button>
@@ -337,28 +371,57 @@ function takeScreenshot() {
   link.download = `emergence-${currentSimName}-${Date.now()}.png`;
   link.href = canvas.toDataURL('image/png');
   link.click();
+  showToast('Screenshot saved');
+}
+
+function toggleControls() {
+  controlsEl.classList.toggle('collapsed-ctrl');
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('visible');
+  clearTimeout(t._tid);
+  t._tid = setTimeout(() => t.classList.remove('visible'), 2000);
 }
 
 const simNames = ['automata','life','lsystem','reaction','boids','fractal'];
 
+let descTimeout = null;
+
 function switchSim(name) {
   currentSimName = name;
+  // Update URL hash for sharing
+  history.replaceState(null, '', '#' + name);
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.sim === name));
   if (animId) cancelAnimationFrame(animId);
   if (activeSim && activeSim.destroy) activeSim.destroy();
   activeSim = null;
   shimmer.classList.remove('hide');
 
+  // Canvas fade transition
+  const wrap = document.getElementById('canvas-wrap');
+  wrap.classList.add('transitioning');
+
   // Close sidebar on mobile
   if (window.innerWidth <= 768) closeSidebar();
+
+  // Reset controls visibility
+  controlsEl.classList.remove('collapsed-ctrl');
 
   setTimeout(() => {
     resize();
     activeSim = sims[name]();
+    wrap.classList.remove('transitioning');
     shimmer.classList.add('hide');
     lastTime = performance.now(); frameCount = 0; fpsTime = lastTime;
     loop(lastTime);
-  }, 80);
+
+    // Auto-dismiss description after 8 seconds
+    clearTimeout(descTimeout);
+    descTimeout = setTimeout(() => { descEl.classList.add('hidden'); }, 8000);
+  }, 100);
 }
 
 function loop(t) {
@@ -386,9 +449,14 @@ document.addEventListener('keydown', (e) => {
     takeScreenshot();
   } else if (key === '?' || key === '/') {
     toggleHelp();
+  } else if (key === 'c' || key === 'C') {
+    toggleControls();
   } else if (key === ' ') {
     e.preventDefault();
-    if (activeSim && activeSim.togglePause) activeSim.togglePause();
+    if (activeSim && activeSim.togglePause) {
+      activeSim.togglePause();
+      showToast('Toggled pause');
+    }
   } else if (key === 'Escape') {
     const help = document.getElementById('help-overlay');
     if (help.classList.contains('visible')) toggleHelp();
@@ -483,12 +551,17 @@ sims.automata = function() {
 
       const genEl = document.getElementById('eca-gen');
       if (genEl) genEl.textContent = generation;
-      if (row >= maxRows) { init(); }
+      if (row >= maxRows) {
+        // Smooth fade before restart
+        ctx.fillStyle = 'rgba(10,10,18,0.05)';
+        ctx.fillRect(0, 0, W, H);
+        init();
+      }
     },
     draw() {},
     resize() { init(); },
     togglePause() { window._eca_pause(); },
-    destroy() { delete window._eca_setRule; delete window._eca_pause; }
+    destroy() { delete window._eca_setRule; delete window._eca_pause; delete window._eca_cs; delete window._eca_rule; }
   };
 };
 
@@ -558,13 +631,14 @@ sims.life = function() {
 
   function getCell(e) {
     const rect = canvas.getBoundingClientRect();
-    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    const clientX = e.touches && e.touches.length ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches && e.touches.length ? e.touches[0].clientY : e.clientY;
     return { x: Math.floor((clientX - rect.left) / cs), y: Math.floor((clientY - rect.top) / cs) };
   }
 
-  const onDown = (e) => { e.preventDefault(); painting=true; const {x,y}=getCell(e); if(x>=0&&x<cols&&y>=0&&y<rows){paintVal=grid[y*cols+x]?0:1;grid[y*cols+x]=paintVal;ages[y*cols+x]=paintVal?1:0;} };
-  const onMove = (e) => { if(!painting)return; e.preventDefault(); const{x,y}=getCell(e); if(x>=0&&x<cols&&y>=0&&y<rows){grid[y*cols+x]=paintVal;ages[y*cols+x]=paintVal?1:0;} };
+  // Clamp to 1..cols-2 / 1..rows-2 so painted cells are inside the simulation boundary
+  const onDown = (e) => { e.preventDefault(); painting=true; const {x,y}=getCell(e); const cx=Math.max(1,Math.min(x,cols-2)),cy=Math.max(1,Math.min(y,rows-2)); paintVal=grid[cy*cols+cx]?0:1;grid[cy*cols+cx]=paintVal;ages[cy*cols+cx]=paintVal?1:0; };
+  const onMove = (e) => { if(!painting)return; e.preventDefault(); const{x,y}=getCell(e); const cx=Math.max(1,Math.min(x,cols-2)),cy=Math.max(1,Math.min(y,rows-2)); grid[cy*cols+cx]=paintVal;ages[cy*cols+cx]=paintVal?1:0; };
   const onUp = () => { painting=false; };
   canvas.addEventListener('mousedown', onDown);
   canvas.addEventListener('mousemove', onMove);
@@ -639,7 +713,7 @@ sims.life = function() {
       canvas.removeEventListener('touchstart', onDown);
       canvas.removeEventListener('touchmove', onMove);
       canvas.removeEventListener('touchend', onUp);
-      delete window._life_init;
+      delete window._life_init; delete window._life_speed; delete window._life_running;
     }
   };
 };
@@ -676,7 +750,7 @@ sims.lsystem = function() {
     const len = preset.iter > 10 ? 2 : preset.iter > 7 ? 3 : preset.iter > 5 ? 4 : 6;
 
     for (const ch of str) {
-      if (ch==='F'||ch==='G'||ch==='1') {
+      if (ch==='F'||ch==='G'||(ch>='1'&&ch<='9')) {
         const nx = x+Math.cos(a*rad)*len, ny = y+Math.sin(a*rad)*len;
         segments.push({x1:x,y1:y,x2:nx,y2:ny,depth:stack.length});
         x=nx; y=ny;
@@ -759,7 +833,7 @@ sims.lsystem = function() {
     },
     resize() { build(current); },
     togglePause() { paused = !paused; },
-    destroy() { delete window._lsys_build; }
+    destroy() { delete window._lsys_build; delete window._lsys_current; delete window._lsys_aspeed; }
   };
 };
 
@@ -826,8 +900,8 @@ sims.reaction = function() {
 
   function getSeedPos(e) {
     const rect = canvas.getBoundingClientRect();
-    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    const clientX = e.touches && e.touches.length ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches && e.touches.length ? e.touches[0].clientY : e.clientY;
     return { x: (clientX - rect.left) / scale, y: (clientY - rect.top) / scale };
   }
 
@@ -913,7 +987,7 @@ sims.reaction = function() {
       canvas.removeEventListener('touchstart', onDown);
       canvas.removeEventListener('touchmove', onMove);
       canvas.removeEventListener('touchend', onUp);
-      delete window._rd_init; delete window._rd_pause;
+      delete window._rd_init; delete window._rd_pause; delete window._rd_f; delete window._rd_k; delete window._rd_bs; delete window._rd_presets;
     }
   };
 };
@@ -945,7 +1019,7 @@ sims.boids = function() {
   const onMM = (e) => { const r=canvas.getBoundingClientRect(); mouseX=e.clientX-r.left; mouseY=e.clientY-r.top; mouseActive=true; };
   const onML = () => { mouseActive=false; };
   const onCtx = (e) => { e.preventDefault(); predatorMode = true; setTimeout(() => predatorMode = false, 500); };
-  const onTouch = (e) => { const r=canvas.getBoundingClientRect(); mouseX=e.touches[0].clientX-r.left; mouseY=e.touches[0].clientY-r.top; mouseActive=true; };
+  const onTouch = (e) => { if(!e.touches.length)return; const r=canvas.getBoundingClientRect(); mouseX=e.touches[0].clientX-r.left; mouseY=e.touches[0].clientY-r.top; mouseActive=true; };
   const onTouchEnd = () => { mouseActive=false; };
   canvas.addEventListener('mousemove', onMM);
   canvas.addEventListener('mouseleave', onML);
@@ -1026,8 +1100,11 @@ sims.boids = function() {
 
         b.x += b.vx; b.y += b.vy;
 
-        if (b.x < 0) b.x += W; if (b.x > W) b.x -= W;
-        if (b.y < 0) b.y += H; if (b.y > H) b.y -= H;
+        // Wrap with trail reset to prevent cross-screen streaks
+        let wrapped = false;
+        if (b.x < 0) { b.x += W; wrapped = true; } else if (b.x > W) { b.x -= W; wrapped = true; }
+        if (b.y < 0) { b.y += H; wrapped = true; } else if (b.y > H) { b.y -= H; wrapped = true; }
+        if (wrapped) b.trail.length = 0;
 
         b.trail.push({x:b.x, y:b.y});
         if (b.trail.length > 12) b.trail.shift();
@@ -1087,7 +1164,7 @@ sims.boids = function() {
       canvas.removeEventListener('touchstart', onTouch);
       canvas.removeEventListener('touchmove', onTouch);
       canvas.removeEventListener('touchend', onTouchEnd);
-      delete window._boids_init; delete window._boids_pause;
+      delete window._boids_init; delete window._boids_pause; delete window._boids_sepW; delete window._boids_aliW; delete window._boids_cohW; delete window._boids_spd;
     }
   };
 };
@@ -1258,7 +1335,10 @@ sims.fractal = function() {
       lastTouchDist = dist;
     }
   };
-  const onTouchEnd = (e) => { dragging = false; lastTouchDist = 0; };
+  const onTouchEnd = (e) => {
+    if (e.touches.length < 2) lastTouchDist = 0;
+    if (e.touches.length === 0) dragging = false;
+  };
 
   canvas.addEventListener('wheel', onWheel, {passive: false});
   canvas.addEventListener('mousedown', onMouseDown);
@@ -1367,6 +1447,9 @@ sims.fractal = function() {
       canvas.removeEventListener('touchmove', onTouchMove);
       canvas.removeEventListener('touchend', onTouchEnd);
       canvas.style.cursor = '';
+      delete window._mb_iter; delete window._mb_julia; delete window._mb_cs;
+      delete window._mb_jcx; delete window._mb_jcy; delete window._mb_redraw;
+      delete window._mb_cx; delete window._mb_cy; delete window._mb_tz; delete window._mb_presets;
     }
   };
 };
@@ -1375,7 +1458,15 @@ sims.fractal = function() {
 //  INIT
 // ============================================================
 resize();
-switchSim('automata');
+// Support URL hash navigation (e.g. #boids, #fractal)
+const hashSim = location.hash.slice(1);
+switchSim(simNames.includes(hashSim) ? hashSim : 'automata');
+window.addEventListener('hashchange', () => {
+  const h = location.hash.slice(1);
+  if (simNames.includes(h) && h !== currentSimName) switchSim(h);
+});
+// Start with sidebar collapsed on mobile
+if (window.innerWidth <= 768) document.getElementById('sidebar').classList.add('collapsed');
 </script>
 </body>
 </html>
