@@ -213,6 +213,22 @@
   #canvas-wrap.transitioning canvas{opacity:0.3;transition:opacity .15s}
   #canvas-wrap canvas{transition:opacity .3s ease}
 
+  /* --- Sim interaction hints --- */
+  .sim-hint{
+    position:absolute;bottom:20%;left:50%;transform:translateX(-50%);
+    background:rgba(18,18,31,.75);backdrop-filter:blur(8px);
+    color:#e0e0f0;font-size:13px;padding:8px 20px;border-radius:20px;
+    pointer-events:none;opacity:1;transition:opacity .6s ease;z-index:5;
+    border:1px solid rgba(108,99,255,.3);
+  }
+  [data-theme="light"] .sim-hint{background:rgba(255,255,255,.8);color:#1a1a2e;border-color:rgba(91,82,230,.3)}
+  .sim-hint.fade-out{opacity:0}
+
+  /* --- Light theme overlay fixes --- */
+  [data-theme="light"] #help-overlay{background:rgba(240,240,245,.75)}
+  [data-theme="light"] #tour-overlay{background:rgba(240,240,245,.6)}
+  [data-theme="light"] #controls-toggle{background:rgba(255,255,255,.92)}
+
   /* --- Tour --- */
   #tour-overlay{
     position:fixed;inset:0;z-index:90;background:rgba(10,10,18,.7);
@@ -311,6 +327,7 @@
       <button onclick="takeScreenshot()" title="Save screenshot">&#128247; Save</button>
       <button onclick="toggleTheme()" title="Toggle theme (T)" id="theme-btn">&#9790; Theme</button>
       <button onclick="toggleHelp()" title="Keyboard shortcuts">&#63; Help</button>
+      <button onclick="toggleAutoPlay()" title="Auto-play (A)">&#9654; Auto</button>
     </div>
   </nav>
 
@@ -320,6 +337,9 @@
       <button class="topbar-btn" id="toggle-sidebar" onclick="toggleSidebar()" title="Toggle sidebar (S)" aria-label="Toggle sidebar">&#9776;</button>
       <span id="sim-title">Elementary Cellular Automata</span>
       <span id="fps-counter">-- fps</span>
+      <input type="range" id="bloom-slider" min="0" max="100" value="50" title="Bloom intensity"
+        style="width:55px;height:4px;accent-color:var(--accent);opacity:0.7;cursor:pointer;vertical-align:middle"
+        oninput="bloomIntensity=this.value/100">
       <button class="topbar-btn" onclick="takeScreenshot()" title="Screenshot (P)" aria-label="Take screenshot">&#128247;</button>
       <button class="topbar-btn" onclick="toggleFullscreen()" title="Fullscreen (F)" aria-label="Toggle fullscreen">&#x26F6;</button>
     </div>
@@ -373,6 +393,7 @@
     <div class="help-row"><span class="help-desc">Toggle controls panel</span><span class="help-key">C</span></div>
     <div class="help-row"><span class="help-desc">Pause / Play</span><span class="help-key">Space</span></div>
     <div class="help-row"><span class="help-desc">Toggle bloom/glow</span><span class="help-key">B</span></div>
+    <div class="help-row"><span class="help-desc">Auto-play mode</span><span class="help-key">A</span></div>
     <div class="help-row"><span class="help-desc">This help</span><span class="help-key">?</span></div>
     <button id="help-close" onclick="toggleHelp()">Close</button>
   </div>
@@ -467,7 +488,38 @@ const simNames = ['automata','life','lsystem','reaction','boids','fractal','ant'
 let descTimeout = null;
 let switchTimeout = null;
 
-function switchSim(name) {
+// Auto-play / screensaver mode
+let autoPlayEnabled = false;
+let autoPlayTimer = null;
+let autoPlayStartTime = 0;
+const autoPlayInterval = 45000;
+
+function startAutoPlay() {
+  autoPlayEnabled = true;
+  autoPlayStartTime = performance.now();
+  scheduleNextAutoPlay();
+  showToast('Auto-play ON');
+}
+function stopAutoPlay() {
+  if (!autoPlayEnabled) return;
+  autoPlayEnabled = false;
+  clearTimeout(autoPlayTimer);
+  autoPlayTimer = null;
+  showToast('Auto-play OFF');
+}
+function scheduleNextAutoPlay() {
+  if (!autoPlayEnabled) return;
+  autoPlayStartTime = performance.now();
+  autoPlayTimer = setTimeout(() => {
+    const idx = (simNames.indexOf(currentSimName) + 1) % simNames.length;
+    switchSim(simNames[idx], true);
+    scheduleNextAutoPlay();
+  }, autoPlayInterval);
+}
+function toggleAutoPlay() { autoPlayEnabled ? stopAutoPlay() : startAutoPlay(); }
+
+function switchSim(name, _fromAutoPlay) {
+  if (autoPlayEnabled && !_fromAutoPlay) stopAutoPlay();
   // Cancel any pending switch to prevent race condition
   if (switchTimeout) { clearTimeout(switchTimeout); switchTimeout = null; }
   currentSimName = name;
@@ -476,6 +528,7 @@ function switchSim(name) {
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.sim === name));
   if (animId) cancelAnimationFrame(animId);
   if (activeSim && activeSim.destroy) activeSim.destroy();
+  emitTransitionParticles();
   activeSim = null;
   shimmer.classList.remove('hide');
 
@@ -498,6 +551,7 @@ function switchSim(name) {
     shimmer.classList.add('hide');
     lastTime = performance.now(); frameCount = 0; fpsTime = lastTime;
     loop(lastTime);
+    showHint(name);
 
     // Auto-dismiss description after 8 seconds
     clearTimeout(descTimeout);
@@ -513,12 +567,30 @@ function loop(t) {
     if (activeSim && activeSim.update) activeSim.update(dt, t);
     if (activeSim && activeSim.draw) activeSim.draw(ctx, W, H);
     applyBloom();
+    if (transParticles.length) updateAndDrawParticles(ctx);
+    if (ripples.length) drawRipples(ctx, t);
+    // Auto-play progress bar
+    if (autoPlayEnabled) {
+      const progress = Math.min((t - autoPlayStartTime) / autoPlayInterval, 1);
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.fillStyle = isLight() ? 'rgba(91,82,230,0.4)' : 'rgba(108,99,255,0.4)';
+      ctx.fillRect(0, 0, canvas.width * progress, 2 * dpr);
+      ctx.restore();
+    }
   } catch(e) {
     console.error('Simulation error:', e);
     return; // stop the loop on error
   }
   animId = requestAnimationFrame(loop);
 }
+
+// --- Click ripple listener ---
+canvas.addEventListener('pointerdown', (e) => {
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = canvas.width / rect.width, scaleY = canvas.height / rect.height;
+  ripples.push({ x: (e.clientX - rect.left) * scaleX, y: (e.clientY - rect.top) * scaleY, born: performance.now() });
+});
 
 // --- Swipe navigation on mobile ---
 let swipeStartX = 0, swipeStartY = 0, swipeStartTime = 0;
@@ -565,6 +637,8 @@ document.addEventListener('keydown', (e) => {
     showToast(bloomEnabled ? 'Bloom ON' : 'Bloom OFF');
   } else if (key === 'c' || key === 'C') {
     toggleControls();
+  } else if (key === 'a' || key === 'A') {
+    toggleAutoPlay();
   } else if (key === ' ') {
     e.preventDefault();
     if (activeSim && activeSim.togglePause) {
@@ -584,9 +658,31 @@ function setDescription(html) { descEl.innerHTML = html + '<button id="desc-clos
 function setTitle(t) { titleEl.textContent = t; }
 function hsl(h, s, l) { return `hsl(${h},${s}%,${l}%)`; }
 function bgColor() { return getComputedStyle(document.documentElement).getPropertyValue('--bg').trim() || '#0a0a12'; }
+function isLight() { return document.documentElement.getAttribute('data-theme') === 'light'; }
+
+// Interaction hints
+const shownHints = new Set();
+const simHints = {
+  life: 'Click to draw cells',
+  reaction: 'Click to seed chemicals',
+  fractal: 'Scroll to zoom, drag to pan',
+  boids: 'Move mouse to attract, right-click to scare',
+  ant: 'Watch for the highway at ~10,000 steps'
+};
+function showHint(simName) {
+  if (shownHints.has(simName) || !simHints[simName]) return;
+  shownHints.add(simName);
+  const hint = document.createElement('div');
+  hint.className = 'sim-hint';
+  hint.textContent = simHints[simName];
+  document.getElementById('canvas-wrap').appendChild(hint);
+  setTimeout(() => hint.classList.add('fade-out'), 2500);
+  setTimeout(() => hint.remove(), 3100);
+}
 
 // Bloom post-processing
 let bloomEnabled = true;
+let bloomIntensity = 0.5;
 const bloomCanvas = document.createElement('canvas');
 const bloomCtx = bloomCanvas.getContext('2d');
 function applyBloom() {
@@ -599,18 +695,68 @@ function applyBloom() {
   }
   bloomCtx.clearRect(0, 0, bw, bh);
   bloomCtx.drawImage(canvas, 0, 0, bw, bh);
-  bloomCtx.filter = 'blur(6px)';
+  bloomCtx.filter = `blur(${3 + bloomIntensity * 9}px)`;
   bloomCtx.drawImage(bloomCanvas, 0, 0);
   bloomCtx.filter = 'none';
   ctx.save();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.globalCompositeOperation = 'lighter';
-  ctx.globalAlpha = 0.2;
+  ctx.globalAlpha = 0.05 + bloomIntensity * 0.35;
   ctx.imageSmoothingEnabled = true;
   ctx.drawImage(bloomCanvas, 0, 0, bw, bh, 0, 0, canvas.width, canvas.height);
   ctx.globalAlpha = 1;
   ctx.globalCompositeOperation = 'source-over';
   ctx.restore();
+}
+
+// Transition particle burst
+const transParticles = [];
+function emitTransitionParticles() {
+  const cx = W / 2, cy = H / 2;
+  for (let i = 0; i < 45; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const speed = 2 + Math.random() * 4;
+    transParticles.push({
+      x: cx, y: cy,
+      vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed,
+      life: 1, decay: 0.012 + Math.random() * 0.012,
+      size: 2 + Math.random() * 3,
+      hue: Math.random() * 60 + 240
+    });
+  }
+}
+function updateAndDrawParticles(ctx) {
+  for (let i = transParticles.length - 1; i >= 0; i--) {
+    const p = transParticles[i];
+    p.x += p.vx; p.y += p.vy;
+    p.vy += 0.05;
+    p.life -= p.decay;
+    if (p.life <= 0) { transParticles.splice(i, 1); continue; }
+    ctx.globalAlpha = p.life * 0.8;
+    ctx.fillStyle = hsl(p.hue, 80, 60);
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
+// Click ripple overlay
+const ripples = [];
+function easeOutCubic(t) { return 1 - Math.pow(1 - t, 3); }
+function drawRipples(ctx, t) {
+  for (let i = ripples.length - 1; i >= 0; i--) {
+    const rip = ripples[i];
+    const age = (t - rip.born) / 600;
+    if (age > 1) { ripples.splice(i, 1); continue; }
+    const r = 80 * easeOutCubic(age);
+    const alpha = 0.6 * (1 - age);
+    ctx.beginPath();
+    ctx.arc(rip.x, rip.y, r, 0, Math.PI * 2);
+    ctx.strokeStyle = isLight() ? `rgba(91,82,230,${alpha})` : `rgba(108,99,255,${alpha})`;
+    ctx.lineWidth = 2 * (1 - age);
+    ctx.stroke();
+  }
 }
 
 // ============================================================
@@ -728,7 +874,7 @@ sims.automata = function() {
       if (genEl) genEl.textContent = generation;
       if (row >= maxRows) {
         // Smooth fade before restart
-        ctx.fillStyle = document.documentElement.getAttribute('data-theme') === 'light' ? 'rgba(240,240,245,0.05)' : 'rgba(10,10,18,0.05)';
+        ctx.fillStyle = isLight() ? 'rgba(240,240,245,0.05)' : 'rgba(10,10,18,0.05)';
         ctx.fillRect(0, 0, W, H);
         init();
       }
@@ -888,7 +1034,7 @@ sims.life = function() {
           } else if (cooling[i] > 0.05) {
             // Death fade — recently dead cells glow dimly
             const c = cooling[i];
-            ctx.fillStyle = hsl(0, 50, 15 + c * 25);
+            ctx.fillStyle = isLight() ? hsl(0, 40, 70 - c * 20) : hsl(0, 50, 15 + c * 25);
             ctx.globalAlpha = c * 0.6;
             ctx.fillRect(x*cs, y*cs, cs-0.5, cs-0.5);
             ctx.globalAlpha = 1;
@@ -1148,10 +1294,20 @@ sims.reaction = function() {
         ${Object.keys(presetParams).map(k => `<option value="${k}">${k.charAt(0).toUpperCase()+k.slice(1)}</option>`).join('')}
       </select>
     </div>
+    <div class="ctrl-group">
+      <label>Color Palette</label>
+      <select onchange="window._rd_palette=+this.value">
+        <option value="0">Deep Sea</option>
+        <option value="1">Thermal</option>
+        <option value="2">Phosphor</option>
+        <option value="3">Sunset</option>
+      </select>
+    </div>
     <button class="ctrl-btn" id="rd-pause" onclick="window._rd_pause()">Pause</button>
     <button class="ctrl-btn secondary" style="margin-top:6px" onclick="window._rd_init()">Reset</button>
   `);
 
+  window._rd_palette = 0;
   window._rd_f = feed; window._rd_k = kill; window._rd_bs = brushSize;
   window._rd_presets = presetParams;
   window._rd_init = () => { feed = window._rd_f; kill = window._rd_k; init(); imgData = null; };
@@ -1171,13 +1327,29 @@ sims.reaction = function() {
         imgData = offCtx.createImageData(gw, gh);
       }
       const d = imgData.data;
+      const pal = window._rd_palette || 0;
       for (let i = 0; i < gw*gh; i++) {
         const val = v[i];
         const t = Math.min(val * 3, 1);
         let r, g, b;
-        if (t < 0.33) { const s=t/0.33; r=10+s*60; g=10+s*20; b=40+s*120; }
-        else if (t < 0.66) { const s=(t-0.33)/0.33; r=70+s*140; g=30+s*30; b=160-s*30; }
-        else { const s=(t-0.66)/0.34; r=210+s*45; g=60+s*195; b=130+s*125; }
+        if (pal === 1) { // Thermal
+          if (t < 0.25) { const s=t/0.25; r=s*180; g=0; b=0; }
+          else if (t < 0.5) { const s=(t-0.25)/0.25; r=180+s*75; g=s*140; b=0; }
+          else if (t < 0.75) { const s=(t-0.5)/0.25; r=255; g=140+s*115; b=s*40; }
+          else { const s=(t-0.75)/0.25; r=255; g=255; b=40+s*215; }
+        } else if (pal === 2) { // Phosphor
+          if (t < 0.33) { const s=t/0.33; r=0; g=10+s*80; b=5+s*30; }
+          else if (t < 0.66) { const s=(t-0.33)/0.33; r=s*20; g=90+s*165; b=35+s*100; }
+          else { const s=(t-0.66)/0.34; r=20+s*60; g=255; b=135+s*120; }
+        } else if (pal === 3) { // Sunset
+          if (t < 0.33) { const s=t/0.33; r=20+s*100; g=0; b=30+s*120; }
+          else if (t < 0.66) { const s=(t-0.33)/0.33; r=120+s*135; g=s*60; b=150-s*100; }
+          else { const s=(t-0.66)/0.34; r=255; g=60+s*140; b=50-s*50; }
+        } else { // Deep Sea (default)
+          if (t < 0.33) { const s=t/0.33; r=10+s*60; g=10+s*20; b=40+s*120; }
+          else if (t < 0.66) { const s=(t-0.33)/0.33; r=70+s*140; g=30+s*30; b=160-s*30; }
+          else { const s=(t-0.66)/0.34; r=210+s*45; g=60+s*195; b=130+s*125; }
+        }
         const idx = i*4;
         d[idx]=r; d[idx+1]=g; d[idx+2]=b; d[idx+3]=255;
       }
@@ -1196,7 +1368,7 @@ sims.reaction = function() {
       canvas.removeEventListener('touchstart', onDown);
       canvas.removeEventListener('touchmove', onMove);
       canvas.removeEventListener('touchend', onUp);
-      delete window._rd_init; delete window._rd_pause; delete window._rd_f; delete window._rd_k; delete window._rd_bs; delete window._rd_presets;
+      delete window._rd_init; delete window._rd_pause; delete window._rd_f; delete window._rd_k; delete window._rd_bs; delete window._rd_presets; delete window._rd_palette;
     }
   };
 };
@@ -1343,9 +1515,8 @@ sims.boids = function() {
       }
     },
     draw(ctx) {
-      const bg = bgColor();
       // Semi-transparent fade for trail effect
-      ctx.fillStyle = bg === '#0a0a12' ? 'rgba(10,10,18,0.15)' : 'rgba(240,240,245,0.15)';
+      ctx.fillStyle = isLight() ? 'rgba(240,240,245,0.15)' : 'rgba(10,10,18,0.15)';
       ctx.fillRect(0, 0, W, H);
 
       const ms = window._boids_spd || 3.5;
@@ -1407,16 +1578,16 @@ sims.boids = function() {
         ctx.beginPath();
         ctx.arc(mouseX, mouseY, 200, 0, Math.PI*2);
         if (predatorMode) {
-          ctx.strokeStyle = 'rgba(255,60,60,0.4)';
+          ctx.strokeStyle = isLight() ? 'rgba(220,40,40,0.5)' : 'rgba(255,60,60,0.4)';
           ctx.lineWidth = 3;
           // Danger rings
           ctx.stroke();
           ctx.beginPath();
           ctx.arc(mouseX, mouseY, 140, 0, Math.PI*2);
-          ctx.strokeStyle = 'rgba(255,60,60,0.2)';
+          ctx.strokeStyle = isLight() ? 'rgba(220,40,40,0.3)' : 'rgba(255,60,60,0.2)';
           ctx.stroke();
         } else {
-          ctx.strokeStyle = 'rgba(108,99,255,0.15)';
+          ctx.strokeStyle = isLight() ? 'rgba(91,82,230,0.3)' : 'rgba(108,99,255,0.15)';
           ctx.lineWidth = 1;
           ctx.stroke();
         }
@@ -1855,8 +2026,8 @@ sims.ant = function() {
   // Draw ant positions as bright dots
   function drawAnts() {
     for (const ant of ants) {
-      ctx.fillStyle = '#ffffff';
-      ctx.shadowColor = 'rgba(255,255,255,0.8)';
+      ctx.fillStyle = isLight() ? '#1a1a2e' : '#ffffff';
+      ctx.shadowColor = isLight() ? 'rgba(26,26,46,0.8)' : 'rgba(255,255,255,0.8)';
       ctx.shadowBlur = 6;
       ctx.fillRect(ant.x * cs - 1, ant.y * cs - 1, cs + 2, cs + 2);
     }
