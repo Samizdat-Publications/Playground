@@ -85,7 +85,7 @@
 
   /* --- Canvas area --- */
   #canvas-wrap{flex:1;position:relative;overflow:hidden;background:var(--bg)}
-  canvas{display:block;width:100%;height:100%}
+  canvas{display:block;width:100%;height:100%;user-select:none;-webkit-user-select:none;touch-action:none}
 
   /* --- Controls panel --- */
   #controls{
@@ -580,17 +580,19 @@ function loop(t) {
     }
   } catch(e) {
     console.error('Simulation error:', e);
-    return; // stop the loop on error
+    // Don't return — keep the loop alive so the animation recovers
   }
   animId = requestAnimationFrame(loop);
 }
 
 // --- Click ripple listener ---
 canvas.addEventListener('pointerdown', (e) => {
+  e.preventDefault(); // Prevent default drag/selection behavior
   const rect = canvas.getBoundingClientRect();
   const scaleX = canvas.width / rect.width, scaleY = canvas.height / rect.height;
   ripples.push({ x: (e.clientX - rect.left) * scaleX, y: (e.clientY - rect.top) * scaleY, born: performance.now() });
 });
+canvas.addEventListener('dragstart', (e) => e.preventDefault());
 
 // --- Swipe navigation on mobile ---
 let swipeStartX = 0, swipeStartY = 0, swipeStartTime = 0;
